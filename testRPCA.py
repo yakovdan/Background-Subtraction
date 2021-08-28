@@ -2,15 +2,35 @@ import cv2
 import numpy as np
 import glob
 import os
-import pandas as pd
-from imageio import imread
-import matplotlib.pylab as plt
+import sys
+# import pandas as pd
+# from imageio import imread
+# import matplotlib.pylab as plt
 from RobustPCA.rpca import RobustPCA  # install RobustPCA according to Readme.md
-from RobustPCA.spcp import StablePCP
+# from RobustPCA.spcp import StablePCP
 
 video_length = 100  # how many frames to process
 downscale_factor = 1
 
+
+def save_images(image_array, path):
+    num_images = image_array.shape[0]
+    filenames = [path+f"/output_image{i}.bmp" for i in range(num_images)]
+    for i in range(num_images):
+        cv2.imwrite(filenames[i], image_array[i, :, :, :])
+
+
+def prepare_image_array_for_rpca(image_array, resize_factor):
+    """
+    downscale video for faster decomposition, convert to float64 and column stack
+    """
+    shape = image_array.shape
+    vid_length = shape[0]
+    px = (shape[1] // resize_factor)
+    py = (shape[2] // resize_factor)
+    image_array = image_array[:, ::resize_factor, ::resize_factor, :].reshape(vid_length, px*py, 3)
+    image_array = image_array.astype(np.float64)
+    return image_array
 
 def bitmap_to_mat(bitmap_seq):
     """
@@ -33,30 +53,39 @@ def bitmap_to_mat(bitmap_seq):
     return matrix
 
 
-def execute():
-    video_data = bitmap_to_mat(glob.glob("input/*.jpg")[:video_length])
-    shape = video_data.shape
-
-    # downscale video for faster decomposition, convert to float64
-    px = (shape[1] // downscale_factor)
-    py = (shape[2] // downscale_factor)
-    video_data = video_data[:, ::downscale_factor, ::downscale_factor, :].reshape(video_length, px*py, 3)
-    video_data = video_data.astype(np.float64)
-
-    # build RPCA object and allocate space for low rank and sparse matrices
-    # ahead of time
+def compute_RPCA(image_array, name):
     rpca = RobustPCA(max_iter=500, use_fbpca=True, max_rank=1, verbose=True)
-    L_video = np.zeros(video_data.shape, dtype=video_data.dtype)
-    S_video = np.zeros(video_data.shape, dtype=video_data.dtype)
+    L_array = np.zeros(image_array.shape, dtype=image_array.dtype)
+    S_array = np.zeros(image_array.shape, dtype=image_array.dtype)
 
     # perform RPCA for each channel separately
     for i in range(3):
-        rpca.fit(video_data[:, :, i])
-        L_video[:, :, i] = rpca.get_low_rank()
-        S_video[:, :, i] = rpca.get_sparse()
+        print(f"Performing {i}th fit of 3")
+        rpca.fit(image_array[:, :, i])
+        L_array[:, :, i] = rpca.get_low_rank()
+        S_array[:, :, i] = rpca.get_sparse()
 
-    open('L_video_bin_dump.bin', 'wb').write(L_video.tobytes())
-    open('S_video_bin_dump.bin', 'wb').write(S_video.tobytes())
+    open("L_video_bin_dump_"+name+".bin", 'wb').write(L_array.tobytes())
+    open("S_video_bin_dump_"+name+".bin", 'wb').write(S_array.tobytes())
+    return L_array, S_array
+
+def execute():
+    video_data = bitmap_to_mat(glob.glob("./input/*.jpg")[:video_length:1])
+
+    xt_plane = np.copy(video_data)
+    xt_plane = xt_plane.transpose([2, 1, 0, 3])  # new order of axis relative to [t,h,w,c]
+    yt_plane = np.copy(video_data)
+    yt_plane = yt_plane.transpose([1, 2, 0, 3])
+
+    xt_plane = prepare_image_array_for_rpca(xt_plane, downscale_factor)
+    yt_plane = prepare_image_array_for_rpca(yt_plane, downscale_factor)
+
+    print("Starting xt RPCA")
+    xt_lowrank, xt_sparse = compute_RPCA(xt_plane, "xt_plane")
+    print("Starting yt RPCA")
+    yt_lowrank, yt_sparse = compute_RPCA(yt_plane, "yt_plane")
+
+
 
 
 if __name__ == '__main__':
