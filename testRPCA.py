@@ -54,7 +54,12 @@ def bitmap_to_mat(bitmap_seq):
 
 
 def compute_RPCA(image_array, name):
-    rpca = RobustPCA(max_iter=500, use_fbpca=True, max_rank=1, verbose=True)
+    shape = image_array.shape
+    size = shape[0] * shape[1] * shape[2]
+    #rpca = RobustPCA(max_iter=500, lamb=1/size**(1/3), use_fbpca=True, max_rank=1, verbose=True)
+    #rpca = RobustPCA(max_iter=1000, lamb=(1/(size**(1/3))), use_fbpca=True,  verbose=True)
+    #rpca = RobustPCA(max_iter=500, lamb=(1/(size**(1/3))), use_fbpca=False,  verbose=True)
+    rpca = RobustPCA(max_iter=500, lamb=0.3, use_fbpca=False,  verbose=True)
     L_array = np.zeros(image_array.shape, dtype=image_array.dtype)
     S_array = np.zeros(image_array.shape, dtype=image_array.dtype)
 
@@ -67,6 +72,7 @@ def compute_RPCA(image_array, name):
 
     open("L_video_bin_dump_"+name+".bin", 'wb').write(L_array.tobytes())
     open("S_video_bin_dump_"+name+".bin", 'wb').write(S_array.tobytes())
+    open("image_array_dump"+name+".bin", "wb").write(image_array.tobytes())
     return L_array, S_array
 
 def execute():
@@ -76,6 +82,8 @@ def execute():
     xt_plane = xt_plane.transpose([2, 1, 0, 3])  # new order of axis relative to [t,h,w,c]
     yt_plane = np.copy(video_data)
     yt_plane = yt_plane.transpose([1, 2, 0, 3])
+    save_images(xt_plane, "output_xt")
+    save_images(xt_plane, "output_yt")
 
     xt_plane = prepare_image_array_for_rpca(xt_plane, downscale_factor)
     yt_plane = prepare_image_array_for_rpca(yt_plane, downscale_factor)
