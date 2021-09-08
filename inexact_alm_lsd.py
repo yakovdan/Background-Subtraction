@@ -73,18 +73,18 @@ def prox(G_S, lambda1, graph):
                                intercept=intercept, regul=regul)
 
 
-def inexact_alm_lsd(D_in, graph, L=None):
+def inexact_alm_lsd(D0, graph, L0=None):
     # make sure D is in fortran order
-    if not np.isfortran(D_in):
+    if not np.isfortran(D0):
         print('D_in is not in Fortran order')
-        D = np.asfortranarray(D_in)
+        D = np.asfortranarray(D0)
     else:
-        D = D_in
+        D = D0
 
-    n, p = D.shape
+    m, n = D.shape
     d = np.min(D.shape)
 
-    lambda_param = 1 / np.sqrt(n)
+    lambda_param = 1 / np.sqrt(m)
 
     # initialize
     Y = D
@@ -98,8 +98,8 @@ def inexact_alm_lsd(D_in, graph, L=None):
     tol_out = 1e-7
 
     # TODO: start with known background? start with first frame?
-    A = np.zeros(D.shape, order='F') if L is None else L
-    E = np.zeros(D.shape, order='F')
+    L = np.zeros(D.shape, order='F') if L0 is None else L0
+    S = np.zeros(D.shape, order='F')
 
     converged = False
     iter_out = 0
@@ -108,10 +108,10 @@ def inexact_alm_lsd(D_in, graph, L=None):
     while not converged:  # Algorithm line 2
         iter_out += 1
 
-        G = D - E + Y / mu  # Algorithm line 4
+        G_L = D - S + Y / mu  # Algorithm line 4
 
         # matlab algorithm add another condition here (choosvd)
-        u, s, vh = LA.svd(G, full_matrices=False)
+        u, s, vh = LA.svd(G_L, full_matrices=False)
         s = s[0:sv]
 
         # soft-thresholding
@@ -132,13 +132,13 @@ def inexact_alm_lsd(D_in, graph, L=None):
         # print(f'1/mu: {1/mu:.2f}')
         # print(f's: {s}')
 
-        A = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
+        L = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
         # A = np.asfortranarray(u[:, 0:sv_count] @ np.diag(s - 1/mu, 0) @ vh[0:sv_count, :])  # Algorithm line 5
-        G2 = D - A + Y / mu  # Algorithm line 7
+        G_S = D - L + Y / mu  # Algorithm line 7
 
-        E = prox(G2, lambda_param / mu, graph)  # Algorithm line 8
+        S = prox(G_S, lambda_param / mu, graph)  # Algorithm line 8
 
-        Z = D - A - E
+        Z = D - L - S
         Y = Y + mu * Z  # Algorithm line 9
         mu = min(mu * rho, mu * 1e7)  # Algorithm line 10 (+limit max mu)
 
@@ -146,13 +146,13 @@ def inexact_alm_lsd(D_in, graph, L=None):
         err = LA.norm(Z, ord='fro') / LA.norm(D, ord='fro')
 
         # print iteration info
-        print(f'Iteration: {iter_out:3d} rank(A): {svp:2d} ||E||_0: {LA.norm(E.flat, ord=0):.2E} err: {err:.3E}')
+        print(f'Iteration: {iter_out:3d} rank(A): {svp:2d} ||E||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
 
         if err < tol_out:
             print('CONVERGED')
             converged = True
 
-    return A, E, iter_out
+    return L, S, iter_out
 
 
 def normalizeImage(image):
@@ -193,7 +193,7 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def main(L=None):
+def main(L0=None):
     np.random.seed(0)
 
     # set print precision to 2 decimal points
@@ -245,6 +245,6 @@ def main(L=None):
 
 if __name__ == '__main__':
     print('START')
-    L = main()
-    # main(L)
+    L0 = main()
+    # main(L0)
     print('DONE')
