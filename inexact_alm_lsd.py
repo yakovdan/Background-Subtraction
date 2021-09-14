@@ -6,7 +6,7 @@ import scipy.io
 import matplotlib.pyplot as plt
 from functools import reduce
 import cv2
-
+import glob
 
 def maxWithIdx(l):
     max_idx = np.argmax(l)
@@ -202,7 +202,8 @@ def main(L0=None):
     # import video
     # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
     ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
-
+    image_list = glob.glob("./input/*.jpg")
+    image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))[:100]
     original_shape = ImData0.shape
 
     # cut to selected frame range and downsample
@@ -230,7 +231,7 @@ def main(L0=None):
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations = inexact_alm_lsd(D, graph, L)
+    L, S, iterations = inexact_alm_lsd(D, graph)
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
