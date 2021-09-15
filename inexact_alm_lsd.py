@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from functools import reduce
 import cv2
 import glob
-
+from utils import *
 def maxWithIdx(l):
     max_idx = np.argmax(l)
     max_val = l[max_idx]
@@ -43,8 +43,8 @@ def getGraphSPAMS(img_shape, batch_shape):
 
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.csc_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
+    groups_var = ssp.csc_matrix((m * n, numGroup), dtype=bool)
 
     # define groups
     for j in range(numY):
@@ -203,13 +203,17 @@ def main(L0=None):
     # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
     ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
     image_list = glob.glob("./input/*.jpg")
-    image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))[:100]
+    image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))
+    image_list = image_list[:100]
+    ImData0 = bitmap_to_mat(image_list, True)
+    ImData0 = ImData0.transpose((1,2,0))
+    ImData0 = np.asfortranarray(ImData0)
     original_shape = ImData0.shape
 
     # cut to selected frame range and downsample
     frame_start = 0
-    frame_end = 47
-    downsample_ratio = 4
+    frame_end = 99
+    downsample_ratio = 1
 
     ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1/downsample_ratio)
     #ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
@@ -233,6 +237,19 @@ def main(L0=None):
 
     L, S, iterations = inexact_alm_lsd(D, graph)
     print(f'iterations: {iterations}')
+
+    Sparse_file = open('Sparse_highway.bin', 'wb')
+    Sparse_file.write(S.tobytes())
+    Sparse_file.close()
+
+    Lowrank_file = open('Lowrank_filehighway.bin', 'wb')
+    Lowrank_file.write(L.tobytes())
+    Lowrank_file.close()
+
+    logfile = open('highwaylog.txt','w')
+    logfile.write(f"Sparse shape: {S.shape}\t dtype: {S.dtype}\n")
+    logfile.write(f"Low rank shape: {L.shape}\t dtype: {L.dtype}\n")
+    logfile.close()
 
     # mask S and reshape back to 3d array
     S_mask = foregound_mask(S, D, L).reshape(original_downsampled_shape, order='F')
