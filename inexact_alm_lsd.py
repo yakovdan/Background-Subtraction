@@ -4,29 +4,9 @@ import spams
 import scipy.sparse as ssp
 import scipy.io
 import matplotlib.pyplot as plt
-from functools import reduce
-import cv2
+from utilities import maxWithIdx, resize_with_cv2, svd_reconstruct, svd_k_largest
 import time
-
-
-def maxWithIdx(l):
-    max_idx = np.argmax(l)
-    max_val = l[max_idx]
-    return max_val, max_idx
-
-
-def multiMatmul(*matrices, order='C'):
-    return reduce(lambda result, mat: np.matmul(result, mat, order=order), matrices)
-
-
-def resize_with_cv2(images, ratio):
-    result_size = [int(np.ceil(images.shape[i]*ratio)) for i in [0, 1]]
-    T = images.shape[2]
-    result = np.empty(result_size + [T])
-    interpolation = cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC
-    for t in range(T):
-        result[:, :, t] = cv2.resize(images[:, :, t], result_size[::-1], interpolation=interpolation)
-    return result
+from scipy.sparse.linalg import svds
 
 
 def getGraphSPAMS(img_shape, batch_shape):
@@ -74,7 +54,7 @@ def prox(G_S, lambda1, graph):
                                intercept=intercept, regul=regul)
 
 
-def inexact_alm_lsd(D0, graph, L0=None):
+def inexact_alm_lsd(D0, graph, use_svds=True):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -85,7 +65,8 @@ def inexact_alm_lsd(D0, graph, L0=None):
     m, n = D.shape
     d = np.min(D.shape)
 
-    lambda_param = 1 / np.sqrt(m)
+    delta = 10
+    lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
 
     # initialize
     Y = D
@@ -95,11 +76,11 @@ def inexact_alm_lsd(D0, graph, L0=None):
     Y = Y / dual_norm
 
     mu = 12.5 / norm_two  # can be tuned
-    rho = 1.5
+    rho = 1.6
     tol_out = 1e-7
 
     # TODO: start with known background? start with first frame?
-    L = np.zeros(D.shape, order='F') if L0 is None else L0
+    # L = np.zeros(D.shape, order='F')
     S = np.zeros(D.shape, order='F')
 
     converged = False
@@ -113,29 +94,25 @@ def inexact_alm_lsd(D0, graph, L0=None):
         G_L = D - S + Y / mu  # Algorithm line 4
 
         # matlab algorithm add another condition here (choosvd)
-        u, s, vh = LA.svd(G_L, full_matrices=False)
-        s = s[0:sv]
+        u, s, vh = svd_k_largest(G_L, sv)
+
+
+        # s = s_all
 
         # soft-thresholding
-        last_nonzero_sv_idx = np.max(np.nonzero(s - 1 / mu > 0))
-        svn = last_nonzero_sv_idx + 1
+        nonzero_elements = np.nonzero(s - 1 / mu > 0)
+        last_nonzero_sv_idx = np.max(nonzero_elements) if len(nonzero_elements[0]) > 0 else -1
+        svp = last_nonzero_sv_idx + 1
 
-        # dark magic 
-        svp = svn
-        ratio = s[:-1] / s[1:]
-        max_ratio, max_idx = maxWithIdx(ratio)
-        if max_ratio > 2:
-            svp = min(svn, max_idx + 1)
+        # predicting the number of s.v bigger than 1/mu
+        # ratio = s[:-1] / s[1:]
+        # max_ratio, max_idx = maxWithIdx(ratio)
+        # svn = svp if max_ratio <= 2 else min(svp, max_idx + 1)
+        # sv = svn + 1 if svn < sv else min(svn + round(0.05 * d), d)
 
-        if svp < sv:
-            sv = min(svp + 1, d)
-        else:
-            sv = min(svp + round(0.05 * d), d)
+        sv = svp + 1 if svp < sv else min(svp + round(0.05 * d), d)
 
-        # print(f'1/mu: {1/mu:.2f}')
-        # print(f's: {s}')
-
-        L = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
+        L = svd_reconstruct(u[:, :svp], s[:svp] - 1 / mu, vh[:svp, :], order='F')  # Algorithm line 5
 
         # SOLVE FOR S
         G_S = D - L + Y / mu  # Algorithm line 7
