@@ -6,6 +6,7 @@ import scipy.io
 import matplotlib.pyplot as plt
 from functools import reduce
 import cv2
+import time
 
 
 def maxWithIdx(l):
@@ -44,7 +45,7 @@ def getGraphSPAMS(img_shape, batch_shape):
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
     groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.csc_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
 
     # define groups
     for j in range(numY):
@@ -55,7 +56,7 @@ def getGraphSPAMS(img_shape, batch_shape):
             varsIdx = np.where(indMatrix.flatten(order='F'))
             groups_var[varsIdx, groupIdx] = True
 
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
 
     return graph
 
@@ -108,6 +109,7 @@ def inexact_alm_lsd(D0, graph, L0=None):
     while not converged:  # Algorithm line 2
         iter_out += 1
 
+        # SOLVE FOR L
         G_L = D - S + Y / mu  # Algorithm line 4
 
         # matlab algorithm add another condition here (choosvd)
@@ -118,6 +120,7 @@ def inexact_alm_lsd(D0, graph, L0=None):
         last_nonzero_sv_idx = np.max(np.nonzero(s - 1 / mu > 0))
         svn = last_nonzero_sv_idx + 1
 
+        # dark magic 
         svp = svn
         ratio = s[:-1] / s[1:]
         max_ratio, max_idx = maxWithIdx(ratio)
@@ -133,11 +136,12 @@ def inexact_alm_lsd(D0, graph, L0=None):
         # print(f's: {s}')
 
         L = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
-        # A = np.asfortranarray(u[:, 0:sv_count] @ np.diag(s - 1/mu, 0) @ vh[0:sv_count, :])  # Algorithm line 5
-        G_S = D - L + Y / mu  # Algorithm line 7
 
+        # SOLVE FOR S
+        G_S = D - L + Y / mu  # Algorithm line 7
         S = prox(G_S, lambda_param / mu, graph)  # Algorithm line 8
 
+        # UPDATE Y, mu
         Z = D - L - S
         Y = Y + mu * Z  # Algorithm line 9
         mu = min(mu * rho, mu * 1e7)  # Algorithm line 10 (+limit max mu)
@@ -146,7 +150,7 @@ def inexact_alm_lsd(D0, graph, L0=None):
         err = LA.norm(Z, ord='fro') / LA.norm(D, ord='fro')
 
         # print iteration info
-        print(f'Iteration: {iter_out:3d} rank(A): {svp:2d} ||E||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
+        print(f'Iteration: {iter_out:3d} rank(L): {svp:2d} ||S||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
 
         if err < tol_out:
             print('CONVERGED')
@@ -161,7 +165,7 @@ def normalizeImage(image):
     image *= 1.0 / np.max(image)
 
 
-def foregound_mask(S, D, L):
+def foreground_mask(S, D, L):
     S_abs = np.abs(S)
     S_back_temp = S_abs < 0.5 * np.max(S_abs)
     S_diff = np.abs(D - L) * S_back_temp
@@ -230,11 +234,11 @@ def main(L0=None):
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations = inexact_alm_lsd(D, graph, L)
+    L, S, iterations = inexact_alm_lsd(D, graph, L0)
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
-    S_mask = foregound_mask(S, D, L).reshape(original_downsampled_shape, order='F')
+    S_mask = foreground_mask(S, D, L).reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
     print('Plotting...')
@@ -245,6 +249,9 @@ def main(L0=None):
 
 if __name__ == '__main__':
     print('START')
+    start = time.time()
     L0 = main()
     # main(L0)
+    end = time.time()
     print('DONE')
+    print(f'ELAPSED TIME: {(end-start):.3f} seconds')
