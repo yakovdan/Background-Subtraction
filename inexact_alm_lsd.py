@@ -93,11 +93,7 @@ def inexact_alm_lsd(D0, graph, use_svds=True):
         # SOLVE FOR L
         G_L = D - S + Y / mu  # Algorithm line 4
 
-        # matlab algorithm add another condition here (choosvd)
         u, s, vh = svd_k_largest(G_L, sv)
-
-
-        # s = s_all
 
         # soft-thresholding
         nonzero_elements = np.nonzero(s - 1 / mu > 0)

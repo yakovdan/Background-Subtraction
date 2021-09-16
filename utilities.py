@@ -31,8 +31,8 @@ def svd_reconstruct(u, s, vh, order='C'):
 
 def should_use_svds(d, k):
     """
-    k - is the total s.v in the matrix (min(n,p))
-    sv - # of s.v we want to compute
+    d - is the total s.v in the matrix (min(n,p))
+    k - # of s.v we want to compute
     """
     ratio = 0.02 if d <= 100 \
         else 0.06 if d <= 200 \
@@ -47,7 +47,6 @@ def should_use_svds(d, k):
 def svd_k_largest(G, k):
     d = np.min(G.shape)
     use_svds = should_use_svds(d, k)
-    print('use_svds: ' + str(use_svds))
     if use_svds:
         u, s, vh = svds(G, k=k)
         return u[:, ::-1], s[::-1], vh[::-1, :]  # svds return s.v in descending order
