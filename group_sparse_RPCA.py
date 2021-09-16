@@ -1,6 +1,6 @@
 import numpy as np
 from numpy import linalg as LA
-from utilities import maxWithIdx, multiMatmul
+from utilities import get_last_nonzero_idx, svd_k_largest, svd_reconstruct
 import time
 
 
@@ -27,7 +27,7 @@ def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu, large_val
     return result
 
 
-def inexact_alm_group_sparse_RPCA(D0):
+def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -56,6 +56,7 @@ def inexact_alm_group_sparse_RPCA(D0):
     S = np.zeros(D.shape, order='F')
 
     converged = False
+    max_iter = 500
     iter_out = 0
     sv = 10  # sv0
 
@@ -65,27 +66,20 @@ def inexact_alm_group_sparse_RPCA(D0):
         # SOLVE FOR L
         G_L = D - S + Y / mu  # Algorithm line 4
 
-        # matlab algorithm add another condition here (choosvd)
-        u, s, vh = LA.svd(G_L, full_matrices=False)
-        s = s[0:sv]
+        u, s, vh = svd_k_largest(G_L, sv)
 
         # soft-thresholding
-        last_nonzero_sv_idx = np.max(np.nonzero(s - 1 / mu > 0))
-        svp = last_nonzero_sv_idx + 1  # svp = # of s.v that are bigger than 1/mu
+        last_nonzero_sv_idx = get_last_nonzero_idx(s - 1 / mu > 0)
+        svp = last_nonzero_sv_idx + 1
 
         # predicting the number of s.v bigger than 1/mu
-        ratio = s[:-1] / s[1:]
-        max_ratio, max_idx = maxWithIdx(ratio)
-        svn = svp if max_ratio <= 2 else min(svp, max_idx + 1)
+        sv = svp + 1 if svp < sv else min(svp + round(0.05 * d), d)
 
-        # matlab used round(0.05 * d) instead of 10
-        sv = svn + 1 if svn < sv else min(svn + 10, d)
-
-        L = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
+        L = svd_reconstruct(u[:, :svp], s[:svp] - 1 / mu, vh[:svp, :], order='F')
 
         # SOLVE FOR S
         G_S = D - L + Y / mu  # Algorithm line 7
-        S = prox(G_S, lambda_param / mu, graph)  # Algorithm line 8
+        S = block_shrinkage_operator(G_S, blocks_by_frame, lambdas_by_frame, mu)
 
         # UPDATE Y, mu
         Z = D - L - S
@@ -101,8 +95,11 @@ def inexact_alm_group_sparse_RPCA(D0):
         if err < tol_out:
             print('CONVERGED')
             converged = True
+        elif iter_out >= max_iter:
+            print('CONVERGED')
+            break
 
-    return L, S, iter_out
+    return L, S, iter_out, converged
 
 
 def check_BS_operator():

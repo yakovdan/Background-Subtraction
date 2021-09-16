@@ -53,3 +53,8 @@ def svd_k_largest(G, k):
     else:
         u, s, vh = LA.svd(G, full_matrices=False)
         return u[:, :k], s[0:k], vh[:k, :]
+
+
+def get_last_nonzero_idx(arr):
+    nonzero_elements = np.nonzero(arr)
+    return np.max(nonzero_elements) if len(nonzero_elements[0]) > 0 else -1

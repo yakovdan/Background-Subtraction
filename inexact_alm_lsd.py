@@ -4,9 +4,8 @@ import spams
 import scipy.sparse as ssp
 import scipy.io
 import matplotlib.pyplot as plt
-from utilities import maxWithIdx, resize_with_cv2, svd_reconstruct, svd_k_largest
+from utilities import resize_with_cv2, svd_reconstruct, svd_k_largest, get_last_nonzero_idx
 import time
-from scipy.sparse.linalg import svds
 
 
 def getGraphSPAMS(img_shape, batch_shape):
@@ -84,6 +83,7 @@ def inexact_alm_lsd(D0, graph, use_svds=True):
     S = np.zeros(D.shape, order='F')
 
     converged = False
+    max_iter = 500
     iter_out = 0
     sv = 10
 
@@ -96,8 +96,7 @@ def inexact_alm_lsd(D0, graph, use_svds=True):
         u, s, vh = svd_k_largest(G_L, sv)
 
         # soft-thresholding
-        nonzero_elements = np.nonzero(s - 1 / mu > 0)
-        last_nonzero_sv_idx = np.max(nonzero_elements) if len(nonzero_elements[0]) > 0 else -1
+        last_nonzero_sv_idx = get_last_nonzero_idx(s - 1 / mu > 0)
         svp = last_nonzero_sv_idx + 1
 
         # predicting the number of s.v bigger than 1/mu
@@ -128,8 +127,11 @@ def inexact_alm_lsd(D0, graph, use_svds=True):
         if err < tol_out:
             print('CONVERGED')
             converged = True
+        elif iter_out >= max_iter:
+            print('CONVERGED')
+            break
 
-    return L, S, iter_out
+    return L, S, iter_out, converged
 
 
 def normalizeImage(image):
@@ -207,7 +209,7 @@ def main(L0=None):
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations = inexact_alm_lsd(D, graph, L0)
+    L, S, iterations, converged = inexact_alm_lsd(D, graph, L0)
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
