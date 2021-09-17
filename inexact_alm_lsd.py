@@ -31,7 +31,7 @@ def getGraphSPAMS(img_shape, batch_shape):
         for i in range(numX):
             indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
             indMatrix[i:(i + a), j:(j + b)] = True
-            groupIdx = j*(numX-1) + i
+            groupIdx = j * (numX - 1) + i
             varsIdx = np.where(indMatrix.flatten(order='F'))
             groups_var[varsIdx, groupIdx] = True
 
@@ -41,9 +41,8 @@ def getGraphSPAMS(img_shape, batch_shape):
 
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
-def prox(G_S, lambda1, graph):
+def prox(G_S, lambda1, graph, num_threads=1):
     regul = 'graph'
-    num_threads = -1  # all cores (-1 by default)
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
     intercept = False  # can be used with all the other regularizations
@@ -53,13 +52,31 @@ def prox(G_S, lambda1, graph):
                                intercept=intercept, regul=regul)
 
 
-def inexact_alm_lsd(D0, graph, use_svds=True):
+def prox_by_frame(G_S, lambda1, graphs, num_threads=1):
+    regul = 'graph'
+    verbose = False  # verbosity, false by default
+    pos = False  # can be used with all the other regularizations
+    intercept = False  # can be used with all the other regularizations
+
+    result = np.zeros_like(G_S)
+    for frame_idx in range(G_S.shape[1]):
+        result[:, [frame_idx]] = spams.proximalGraph(G_S[:, [frame_idx]], graphs[frame_idx], False,
+                                                     lambda1=lambda1, numThreads=num_threads,
+                                                     verbose=verbose, pos=pos,
+                                                     intercept=intercept, regul=regul)
+
+    return result
+
+
+def inexact_alm_lsd(D0, graphs):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
         D = np.asfortranarray(D0)
     else:
         D = D0
+
+    use_prox_by_frame = isinstance(graphs, np.ndarray)
 
     m, n = D.shape
     d = np.min(D.shape)
@@ -111,7 +128,10 @@ def inexact_alm_lsd(D0, graph, use_svds=True):
 
         # SOLVE FOR S
         G_S = D - L + Y / mu  # Algorithm line 7
-        S = prox(G_S, lambda_param / mu, graph)  # Algorithm line 8
+
+        # Algorithm line 8
+        S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
+            else prox(G_S, lambda_param / mu, graphs)
 
         # UPDATE Y, mu
         Z = D - L - S
@@ -154,7 +174,7 @@ def foreground_mask(S, D, L):
 
 def subplots_samples(sources, idx, size_factor=1):
     # plot sources on the rows and idxs on the columns
-    figsize = (size_factor * len(idx),size_factor * len(sources))
+    figsize = (size_factor * len(idx), size_factor * len(sources))
     fig, axes = plt.subplots(len(sources), len(idx), figsize=figsize, gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
 
     for ix, iy in np.ndindex(axes.shape):
@@ -172,7 +192,7 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def main(L0=None):
+def main():
     np.random.seed(0)
 
     # set print precision to 2 decimal points
@@ -189,8 +209,8 @@ def main(L0=None):
     frame_end = 47
     downsample_ratio = 4
 
-    ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1/downsample_ratio)
-    #ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
+    ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
+    # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
 
     normalizeImage(ImData1)
 
@@ -205,15 +225,17 @@ def main(L0=None):
     # build graph for spams.proximalGraph
     BLOCK_SIZE = (3, 3)
     graph = getGraphSPAMS((w, h), BLOCK_SIZE)
+    graphs = np.full(frames, graph)  # duplicate to test prox_by_frame
 
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations, converged = inexact_alm_lsd(D, graph, L0)
+    L, S, iterations, converged = inexact_alm_lsd(D, graphs)
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
-    S_mask = foreground_mask(S, D, L).reshape(original_downsampled_shape, order='F')
+    S = foreground_mask(S, D, L)
+    S_mask = S.reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
     print('Plotting...')
@@ -229,4 +251,4 @@ if __name__ == '__main__':
     # main(L0)
     end = time.time()
     print('DONE')
-    print(f'ELAPSED TIME: {(end-start):.3f} seconds')
+    print(f'ELAPSED TIME: {(end - start):.3f} seconds')
