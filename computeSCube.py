@@ -3,7 +3,7 @@ import os
 import cv2
 import numpy as np
 from scipy.ndimage.filters import convolve
-
+from utils import *
 
 def gkern(l=10, sig=1.):
     """
@@ -16,18 +16,6 @@ def gkern(l=10, sig=1.):
     kernel = np.exp(-0.5 * (np.square(xx) + np.square(yy) + np.square(zz)) / np.square(sig))
 
     return kernel / np.sum(kernel)
-
-
-def load_sparse_array(filename, dimensions):
-    """
-    load a numpy array from a binary file (filename)
-    and arrange it into an array with the provided dimensions
-    """
-    f = open(filename, 'rb')
-    raw_array = f.read()
-    f.close()
-    np_array = np.frombuffer(raw_array, dtype=np.float64).reshape(dimensions)
-    return np_array
 
 
 def build_sparse_xt_cube(sparse_xt):
@@ -70,7 +58,7 @@ def adaptive_threshold(cube):
     binary_cube = np.zeros(cube.shape, dtype=np.uint8)
     mean = np.mean(cube[:, :, :])
     std = np.std(cube[:, :, :])
-    idx = (cube[:, :, :] > mean+std)
+    idx = (cube[:, :, :] > mean)#+std)
     binary_cube[idx] = 1
     return binary_cube
 
@@ -85,17 +73,26 @@ def output_video(video_array, path):
         cv2.imwrite(path+f"/output_sparse_frame_{i}.bmp", cv2.cvtColor(video_out_array[i, :, :], cv2.COLOR_GRAY2RGB))
 
 
-def execute():
-    sparse_xt = load_sparse_array('S_video_bin_dump_xt_plane.bin', (320, 240, 134))
-    sparse_yt = load_sparse_array('S_video_bin_dump_yt_plane.bin', (240, 320, 134))
+def computeSCube(path_xt, path_yt):
+    print('Load sparse xt, yt matrices')
+    sparse_xt = load_mat_from_bin(path_xt, np.float64, (320, 240, 200))
+    sparse_yt = load_mat_from_bin(path_yt, np.float64, (240, 320, 200))
+    print('build sparse xt, yt cubces')
     sparse_xt_cube = build_sparse_xt_cube(sparse_xt)
     sparse_yt_cube = build_sparse_yt_cube(sparse_yt)
+    print('integrate into a single cube')
     sparse_cube = build_final_cube(sparse_xt_cube, sparse_yt_cube)
+    print('smooth cube')
     smooth_sparse_cube = convolve(sparse_cube[:, :, :], gkern(), mode='reflect')
     print(np.sum(smooth_sparse_cube)) # should be close to 1
-    binary_cube = adaptive_threshold(smooth_sparse_cube)
-    output_video(binary_cube, "binary_video")
+    return smooth_sparse_cube
+    #print('apply adaptive threshold')
+    #binary_cube = adaptive_threshold(smooth_sparse_cube)
+    #print('write output video')
+    #output_video(binary_cube, "binary_video")
+    #print('done')
+    #return binary_cube
 
 if __name__ == "__main__":
     os.chdir('boats')
-    execute()
+    computeSCube()

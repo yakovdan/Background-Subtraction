@@ -1,6 +1,25 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import shutil
+import glob
+
+def create_folder(name):
+    if os.path.exists(name):
+        shutil.rmtree(name)
+
+    os.mkdir(name)
+
+
+def prepare_saliency_folders(idx):
+    create_folder(f"output_xt_{idx}")
+    create_folder(f"output_yt_{idx}")
+    create_folder(f"output_xt_sparse_{idx}")
+    create_folder(f"output_xt_lowrank_{idx}")
+    create_folder(f"output_yt_sparse_{idx}")
+    create_folder(f"output_yt_lowrank_{idx}")
+
 
 def bitmap_to_mat(bitmap_seq, grayscale=False):
     """
@@ -31,6 +50,23 @@ def bitmap_to_mat(bitmap_seq, grayscale=False):
     return matrix
 
 
+def import_video_as_frames(num_frames):
+    # import video
+    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
+    # sort frames in ascending number order because glob can return filenames in any order
+    frames_list = glob.glob('./input/*.jpg')
+    frames_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    frames_list = frames_list[:num_frames]
+    video_data = bitmap_to_mat(frames_list, grayscale=True).astype(np.float64)
+    ImData0 = np.asfortranarray(video_data.transpose((1, 2, 0)).astype(np.float64))
+
+    # ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
+    # image_list = glob.glob("./input/*.jpg")
+    # image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))[:100]
+    original_shape = ImData0.shape
+    return ImData0, video_data
+
+
 def save_images(image_array, path, grayscale):
     """
     given an video array and a folder path, save each image frame to file
@@ -59,3 +95,59 @@ def plot_errors(errors_list, filename, display=False, log_scale=True):
     plt.savefig(filename)
     if display:
         plt.show()
+
+
+def resize_with_cv2_timefirst(images, ratio):
+    result_size = [int(np.ceil(images.shape[i] * ratio)) for i in [1, 2]]
+    T = images.shape[0]
+    result = np.empty([T]+result_size)
+    interpolation = cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC
+    for t in range(T):
+        result[t, :, :] = cv2.resize(images[t, :, :], result_size[::-1], interpolation=interpolation)
+    return result
+
+
+def resize_with_cv2(images, ratio):
+    result_size = [int(np.ceil(images.shape[i] * ratio)) for i in [0, 1]]
+    T = images.shape[2]
+    result = np.empty(result_size + [T])
+    interpolation = cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC
+    for t in range(T):
+        result[:, :, t] = cv2.resize(images[:, :, t], result_size[::-1], interpolation=interpolation)
+    return result
+
+
+def foreground_mask(D, L, S, distance_from_mean=2):
+    S_abs = np.abs(S)
+    m = np.max(S_abs)
+    S_back_temp = S_abs < 0.5 * m
+    S_diff = np.abs(D - L) * S_back_temp
+    positive_S_diff = S_diff[S_diff > 0]
+    mu_s = np.mean(positive_S_diff)
+    sigma_s = np.std(positive_S_diff)
+    th = mu_s + distance_from_mean * sigma_s
+    mask = S_abs > th
+    return mask
+
+
+def load_mat_from_bin(filename, dtype, shape):
+    """
+    load a numpy array from a binary file (filename)
+    and arrange it into an array with the provided dimensions and data type
+    """
+
+    f = open(filename, 'rb')
+    byte_array = f.read()
+    f.close()
+    np_array = np.frombuffer(byte_array, dtype=dtype)
+    np_array = np_array.reshape(shape)
+    return np_array
+
+
+def save_mat_to_bin(matrix, filename):
+    """
+    saves matrix to filename
+    """
+    f = open(filename, 'wb')
+    f.write(matrix.tobytes())
+    f.close()

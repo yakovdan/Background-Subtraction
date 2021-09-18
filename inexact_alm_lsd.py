@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from numpy import linalg as LA
 import spams
@@ -7,6 +8,8 @@ import matplotlib.pyplot as plt
 from functools import reduce
 import cv2
 import glob
+from utils import *
+
 
 def maxWithIdx(l):
     max_idx = np.argmax(l)
@@ -16,16 +19,6 @@ def maxWithIdx(l):
 
 def multiMatmul(*matrices, order='C'):
     return reduce(lambda result, mat: np.matmul(result, mat, order=order), matrices)
-
-
-def resize_with_cv2(images, ratio):
-    result_size = [int(np.ceil(images.shape[i]*ratio)) for i in [0, 1]]
-    T = images.shape[2]
-    result = np.empty(result_size + [T])
-    interpolation = cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC
-    for t in range(T):
-        result[:, :, t] = cv2.resize(images[:, :, t], result_size[::-1], interpolation=interpolation)
-    return result
 
 
 def getGraphSPAMS(img_shape, batch_shape):
@@ -51,7 +44,7 @@ def getGraphSPAMS(img_shape, batch_shape):
         for i in range(numX):
             indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
             indMatrix[i:(i + a), j:(j + b)] = True
-            groupIdx = j*(numX-1) + i
+            groupIdx = j * (numX - 1) + i
             varsIdx = np.where(indMatrix.flatten(order='F'))
             groups_var[varsIdx, groupIdx] = True
 
@@ -175,7 +168,7 @@ def foregound_mask(S, D, L):
 
 def subplots_samples(sources, idx, size_factor=1):
     # plot sources on the rows and idxs on the columns
-    figsize = (size_factor * len(idx),size_factor * len(sources))
+    figsize = (size_factor * len(idx), size_factor * len(sources))
     fig, axes = plt.subplots(len(sources), len(idx), figsize=figsize, gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
 
     for ix, iy in np.ndindex(axes.shape):
@@ -193,26 +186,9 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def main(L0=None):
-    np.random.seed(0)
-
-    # set print precision to 2 decimal points
-    np.set_printoptions(precision=2)
-
-    # import video
-    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
-    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
-    image_list = glob.glob("./input/*.jpg")
-    image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))[:100]
-    original_shape = ImData0.shape
-
-    # cut to selected frame range and downsample
-    frame_start = 0
-    frame_end = 47
-    downsample_ratio = 4
-
-    ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1/downsample_ratio)
-    #ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
+def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4, L0=None):
+    ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
+    # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
 
     normalizeImage(ImData1)
 
@@ -238,14 +214,15 @@ def main(L0=None):
     S_mask = foregound_mask(S, D, L).reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
-    print('Plotting...')
-    subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
+    #    print('Plotting...')
+    #    subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
 
-    return L
+    return L, S, L_recon, S_mask, ImMean
 
 
 if __name__ == '__main__':
     print('START')
-    L0 = main()
+    os.chdir('watersurface')
+    #L0 = main()
     # main(L0)
     print('DONE')
