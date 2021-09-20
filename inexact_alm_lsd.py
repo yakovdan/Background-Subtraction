@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 from utilities import resize_with_cv2, svd_reconstruct, svd_k_largest, get_last_nonzero_idx
 import time
 
-
-def getGraphSPAMS(img_shape, batch_shape):
+def getGraphSPAMS_all_groups(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
         raise "Input lengths are incorrect"
 
@@ -34,6 +33,55 @@ def getGraphSPAMS(img_shape, batch_shape):
             groupIdx = j * (numX - 1) + i
             varsIdx = np.where(indMatrix.flatten(order='F'))
             groups_var[varsIdx, groupIdx] = True
+
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+
+    return graph
+
+def getGraphSPAMS_group_centers(img_shape, group_shape, group_centers=None):
+    """
+    img_shape = (width, height) of image
+    group_shape = (width, height) of groups - odd when using group_centers
+    group_centers = 2D binary matrix of centers locations, or None to use all groups
+    """
+
+    if len(img_shape) != 2 or len(group_shape) != 2:
+        raise "Input lengths are incorrect"
+
+    m = img_shape[0]
+    n = img_shape[1]
+    a = min(group_shape[0], m)
+    b = min(group_shape[1], n)
+
+    if group_centers is None:
+        if a % 2 == 0 or b % 2 == 0:
+            raise "a and b must be odd when using group_centers"
+
+        numX = m - a + 1  # number of groups on x axis
+        numY = n - b + 1  # number of groups on y axis
+        numGroup = numX * numY  # total number of groups
+    else:
+        numGroup = np.sum(group_centers.flat)
+
+    # init graph parameters
+    eta_g = np.ones(numGroup, dtype=np.float64)
+    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
+    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+
+    a_ss = a // 2  # single side
+    b_ss = b // 2  # single side
+
+    # define groups
+    # (i,j) is the center pixel of each group
+    groupIdx = 0
+    for j in range(b_ss, n - b_ss):
+        for i in range(a_ss, m - a_ss):
+            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
+            top_left_i, top_left_j = i - a_ss, j - b_ss
+            indMatrix[top_left_i:(top_left_i + a), top_left_j:(top_left_j + b)] = True
+            varsIdx = np.where(indMatrix.flatten(order='F'))
+            groups_var[varsIdx, groupIdx] = True
+            groupIdx += 1
 
     graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
 
@@ -224,7 +272,7 @@ def main():
 
     # build graph for spams.proximalGraph
     BLOCK_SIZE = (3, 3)
-    graph = getGraphSPAMS((w, h), BLOCK_SIZE)
+    graph = getGraphSPAMS_all_groups((w, h), BLOCK_SIZE)
     graphs = np.full(frames, graph)  # duplicate to test prox_by_frame
 
     # reshape so that each fame is a column
