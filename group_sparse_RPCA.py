@@ -1,6 +1,9 @@
 import numpy as np
 from numpy import linalg as LA
-from utils import get_last_nonzero_idx, svd_k_largest, svd_reconstruct
+
+from inexact_alm_lsd import subplots_samples
+from motion_saliency_check import run_motion_saliency_check
+from utils import *
 import time
 
 
@@ -38,7 +41,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
     m, n = D.shape
     d = np.min(D.shape)
 
-    delta = 10
+    delta = 1
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
 
     # initialize
@@ -127,8 +130,62 @@ def check_BS_operator():
     block_shrinkage_result = block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu, large_val=100)
     print(block_shrinkage_result)
 
+
+def load_data(video_length):
+    image_mean = 0.4233611323018794
+
+    lowrank_mat = load_mat_from_bin('./highway_200frames/Lowrank1_highway.bin', np.float64, (320, 240, video_length))
+    sparse_mat = load_mat_from_bin('./highway_200frames/Sparse1_highway.bin', np.float64, (320, 240, video_length))
+    lowrank_reconstructed = lowrank_mat + image_mean
+
+    # sparse_cube is in [t,h,w] order so transpose
+    sparse_cube = load_mat_from_bin('./highway_200frames/sparse_cube_200.bin', np.float64, (320, 240, video_length))
+    video_list = glob.glob("./input/*.jpg")
+    video_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    video_list = video_list[:video_length]
+
+    ##############################
+    # Load frames and preprocess #
+    ##############################
+    Data = bitmap_to_mat(video_list, True).transpose((2, 1, 0)).astype(np.float64)  # t, h, w -> w, h, t
+    Data -= np.min(Data)
+    Data *= (1.0 / np.max(Data))  # [0, 255] -> [0,1]
+    DataMean = np.mean(Data)
+    Data -= DataMean
+    shape = Data.shape
+
+    groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube)
+
+    Data += DataMean
+
+    return Data, DataMean, groups_by_frame, weights_by_frame
+
+
 def main():
-    check_BS_operator()
+    video_length = 200
+    np.random.seed(0)
+
+    # set print precision to 2 decimal points
+    np.set_printoptions(precision=2)
+
+    print("LOAD DATA")
+    Data, DataMean, groups_by_frame, weights_by_frame = load_data(video_length)
+    Data -= DataMean
+
+    original_shape = Data.shape
+    D = Data.reshape((320 * 240, video_length), order='F')
+
+    print("GROUP SPARSE RPCA")
+    L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame)
+
+    # mask S and reshape back to 3d array
+    S = foreground_mask(S, D, L)
+    S_mask = S.reshape(original_shape, order='F')
+    L_recon = L.reshape(original_shape, order='F') + DataMean
+    Data += DataMean
+
+    print('Plotting...')
+    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 200], size_factor=2)
 
 
 if __name__ == '__main__':

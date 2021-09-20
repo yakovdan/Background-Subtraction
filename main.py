@@ -67,7 +67,6 @@ def main(run_index, video_length):
     shape = Data.shape
 
     groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube)
-    print("")
 
 if __name__ == "__main__":
     run_index = 0

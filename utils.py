@@ -120,7 +120,7 @@ def resize_with_cv2(images, ratio):
     return result
 
 
-def foreground_mask(D, L, S, distance_from_mean=2):
+def foreground_mask(D, L, S, sigmas_from_mean=2):
     S_abs = np.abs(S)
     m = np.max(S_abs)
     S_back_temp = S_abs < 0.5 * m
@@ -128,7 +128,7 @@ def foreground_mask(D, L, S, distance_from_mean=2):
     positive_S_diff = S_diff[S_diff > 0]
     mu_s = np.mean(positive_S_diff)
     sigma_s = np.std(positive_S_diff)
-    th = mu_s + distance_from_mean * sigma_s
+    th = mu_s + sigmas_from_mean * sigma_s
     mask = S_abs > th
     return mask
 

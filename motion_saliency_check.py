@@ -12,7 +12,7 @@ def compute_lsd_mask(data, lowrank_mat, sparse_mat):
     """
 
     size_thresh = (data.shape[0] * data.shape[1]) / 1500
-    mask = foreground_mask(data, lowrank_mat, sparse_mat, distance_from_mean=2)
+    mask = foreground_mask(data, lowrank_mat, sparse_mat, sigmas_from_mean=2)
     mask_image = (mask*255).astype(np.uint8)
     return mask_image, size_thresh
 
@@ -43,8 +43,10 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
         areas[i] = area
 
     for label, area in areas.items():
-        weight = np.sum(sparse_cube[:, :, frame_idx][labels == label]) / area
-        groups.append((frame_idx, weight, area, labels == label))
+        mask_2d = labels == label
+        mask_1d = mask_2d.flatten(order='F')
+        weight = np.sum(sparse_cube[:, :, frame_idx][mask_2d]) / area
+        groups.append((frame_idx, weight, area, mask_1d))
 
     return groups
 
