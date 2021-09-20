@@ -240,22 +240,7 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def main():
-    np.random.seed(0)
-
-    # set print precision to 2 decimal points
-    np.set_printoptions(precision=2)
-
-    # import video
-    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
-    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
-
-    original_shape = ImData0.shape
-
-    # cut to selected frame range and downsample
-    frame_start = 0
-    frame_end = 47
-    downsample_ratio = 4
+def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4):
 
     ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
     # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
@@ -286,17 +271,31 @@ def main():
     S_mask = S.reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
+    return S_mask, L_recon, ImData1
+
+
+def main():
+    np.random.seed(0)
+
+    # set print precision to 2 decimal points
+    np.set_printoptions(precision=2)
+
+    # import video
+    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
+    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
+
+    original_shape = ImData0.shape
+
+    S_mask, L_recon, ImData1 = LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4)
+
     print('Plotting...')
     subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
-
-    return L
 
 
 if __name__ == '__main__':
     print('START')
     start = time.time()
-    L0 = main()
-    # main(L0)
+    main()
     end = time.time()
     print('DONE')
     print(f'ELAPSED TIME: {(end - start):.3f} seconds')
