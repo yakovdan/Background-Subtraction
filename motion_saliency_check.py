@@ -107,7 +107,7 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=
     # to lambda_i value from the paper
     ########################################
 
-    normalization_factor_for_lambda = 1.0/(delta * max(shape[0]*shape[1], shape[2]))
+    normalization_factor_for_lambda = 1.0/(delta * np.sqrt(max(shape[0]*shape[1], shape[2])))
     normalization_factor_for_lambda = normalization_factor_for_lambda * min_weight
 
     ############################################
