@@ -208,3 +208,9 @@ def svd_k_largest(G, k):
 def get_last_nonzero_idx(arr):
     nonzero_elements = np.nonzero(arr)
     return np.max(nonzero_elements) if len(nonzero_elements[0]) > 0 else -1
+
+
+def normalizeImage(image):
+    """ Normalize image so that (min, max) -> (0, 1) """
+    image -= np.min(image)
+    image *= 1.0 / np.max(image)

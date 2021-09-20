@@ -7,14 +7,14 @@ from utils import *
 import time
 
 
-def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu, large_val=1e7):
+def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu):
     """
     G[pixel, frame] - input matrix
     blocks_by_frame[frame, group, mask_pixel] - binary column masks
     lambdas_by_frame[frame, group] - lambda for each block
     mu - number
     """
-    result = np.full_like(G, large_val)  # arbitrarily large value for anything outside of the groups
+    result = np.zeros_like(G)  # arbitrarily large value for anything outside of the groups
     for frame_idx in range(len(blocks_by_frame)):  # run over frames
         blocks = blocks_by_frame[frame_idx]  # get the blocks of that frame
         lambdas = lambdas_by_frame[frame_idx]
@@ -30,7 +30,7 @@ def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu, large_val
     return result
 
 
-def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
+def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=10, use_sv_prediction=true):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -41,7 +41,6 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
     m, n = D.shape
     d = np.min(D.shape)
 
-    delta = 1
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
 
     # initialize
@@ -61,7 +60,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
     converged = False
     max_iter = 500
     iter_out = 0
-    sv = 10  # sv0
+    sv = 10 if use_sv_prediction else d  # sv0
 
     while not converged:  # Algorithm line 2
         iter_out += 1
@@ -76,7 +75,8 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame):
         svp = last_nonzero_sv_idx + 1
 
         # predicting the number of s.v bigger than 1/mu
-        sv = svp + 1 if svp < sv else min(svp + round(0.05 * d), d)
+        if use_sv_prediction:
+            sv = svp + 1 if svp < sv else min(svp + round(0.05 * d), d)
 
         L = svd_reconstruct(u[:, :svp], s[:svp] - 1 / mu, vh[:svp, :], order='F')
 
@@ -148,17 +148,12 @@ def load_data(video_length):
     # Load frames and preprocess #
     ##############################
     Data = bitmap_to_mat(video_list, True).transpose((2, 1, 0)).astype(np.float64)  # t, h, w -> w, h, t
-    Data -= np.min(Data)
-    Data *= (1.0 / np.max(Data))  # [0, 255] -> [0,1]
+    normalizeImage(Data)  # [0, 255] -> [0,1]
     DataMean = np.mean(Data)
     Data -= DataMean
     shape = Data.shape
 
-    groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube)
-
-    Data += DataMean
-
-    return Data, DataMean, groups_by_frame, weights_by_frame
+    return Data, DataMean, lowrank_mat, sparse_mat, sparse_cube
 
 
 def main():
@@ -168,15 +163,18 @@ def main():
     # set print precision to 2 decimal points
     np.set_printoptions(precision=2)
 
+    delta = 10
+
     print("LOAD DATA")
-    Data, DataMean, groups_by_frame, weights_by_frame = load_data(video_length)
-    Data -= DataMean
+    Data, DataMean, lowrank_mat, sparse_mat, sparse_cube = load_data(video_length)
+
+    groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube, delta=delta)
 
     original_shape = Data.shape
     D = Data.reshape((320 * 240, video_length), order='F')
 
     print("GROUP SPARSE RPCA")
-    L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame)
+    L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
 
     # mask S and reshape back to 3d array
     S = foreground_mask(S, D, L)
@@ -185,7 +183,7 @@ def main():
     Data += DataMean
 
     print('Plotting...')
-    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 200], size_factor=2)
+    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
 
 
 if __name__ == '__main__':

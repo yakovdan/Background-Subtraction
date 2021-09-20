@@ -4,7 +4,7 @@ import spams
 import scipy.sparse as ssp
 import scipy.io
 import matplotlib.pyplot as plt
-from utils import resize_with_cv2, svd_reconstruct, svd_k_largest, get_last_nonzero_idx
+from utils import *
 import time
 
 def getGraphSPAMS_all_groups(img_shape, batch_shape):
@@ -200,12 +200,6 @@ def inexact_alm_lsd(D0, graphs):
             break
 
     return L, S, iter_out, converged
-
-
-def normalizeImage(image):
-    """ Normalize image so that (min, max) -> (0, 1) """
-    image -= np.min(image)
-    image *= 1.0 / np.max(image)
 
 
 def foreground_mask(S, D, L):

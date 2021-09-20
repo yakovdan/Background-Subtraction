@@ -65,7 +65,7 @@ def filter_groups(groups, size_thresh):
     return size_filtered_groups, min([g[1] for g in size_filtered_groups])
 
 
-def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube):
+def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=10):
     """
     this function takes a data matrix: np array of the video in [w,h,t] format, np.float64
     lowrank_mat - lowrank output of lsd, same format as above
@@ -107,7 +107,6 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube):
     # to lambda_i value from the paper
     ########################################
 
-    delta = 10
     normalization_factor_for_lambda = 1.0/(delta * max(shape[0]*shape[1], shape[2]))
     normalization_factor_for_lambda = normalization_factor_for_lambda * min_weight
 
