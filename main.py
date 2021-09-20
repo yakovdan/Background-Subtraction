@@ -51,7 +51,7 @@ def main(run_index, video_length):
     #sparse_cube is in [t,h,w] order so transpose
     #sparse_cube = np.ascontiguousarray(sparse_cube.transpose((2, 1, 0))) # now it's [320,240,200], float64
     #save_mat_to_bin(sparse_cube, 'sparse_cube_200.bin')
-    sparse_cube = load_mat_from_bin('sparse_cube_200.bin', np.float64, (320, 240, video_length))
+    sparse_cube = load_mat_from_bin('./highway_200frames/sparse_cube_200.bin', np.float64, (320, 240, video_length))
     video_list = glob.glob("./input/*.jpg")
     video_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
     video_list = video_list[:video_length]
@@ -66,7 +66,8 @@ def main(run_index, video_length):
     Data -= DataMean
     shape = Data.shape
 
-    run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube)
+    groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube)
+    print("")
 
 if __name__ == "__main__":
     run_index = 0

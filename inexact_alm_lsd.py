@@ -1,27 +1,13 @@
-import os
 import numpy as np
 from numpy import linalg as LA
 import spams
 import scipy.sparse as ssp
 import scipy.io
 import matplotlib.pyplot as plt
-from functools import reduce
-import cv2
-import glob
-from utils import *
+from utils import resize_with_cv2, svd_reconstruct, svd_k_largest, get_last_nonzero_idx
+import time
 
-
-def maxWithIdx(l):
-    max_idx = np.argmax(l)
-    max_val = l[max_idx]
-    return max_val, max_idx
-
-
-def multiMatmul(*matrices, order='C'):
-    return reduce(lambda result, mat: np.matmul(result, mat, order=order), matrices)
-
-
-def getGraphSPAMS(img_shape, batch_shape):
+def getGraphSPAMS_all_groups(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
         raise "Input lengths are incorrect"
 
@@ -37,7 +23,7 @@ def getGraphSPAMS(img_shape, batch_shape):
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
     groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.csc_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
 
     # define groups
     for j in range(numY):
@@ -48,15 +34,63 @@ def getGraphSPAMS(img_shape, batch_shape):
             varsIdx = np.where(indMatrix.flatten(order='F'))
             groups_var[varsIdx, groupIdx] = True
 
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+
+    return graph
+
+def getGraphSPAMS_group_centers(img_shape, group_shape, group_centers=None):
+    """
+    img_shape = (width, height) of image
+    group_shape = (width, height) of groups - odd when using group_centers
+    group_centers = 2D binary matrix of centers locations, or None to use all groups
+    """
+
+    if len(img_shape) != 2 or len(group_shape) != 2:
+        raise "Input lengths are incorrect"
+
+    m = img_shape[0]
+    n = img_shape[1]
+    a = min(group_shape[0], m)
+    b = min(group_shape[1], n)
+
+    if group_centers is None:
+        if a % 2 == 0 or b % 2 == 0:
+            raise "a and b must be odd when using group_centers"
+
+        numX = m - a + 1  # number of groups on x axis
+        numY = n - b + 1  # number of groups on y axis
+        numGroup = numX * numY  # total number of groups
+    else:
+        numGroup = np.sum(group_centers.flat)
+
+    # init graph parameters
+    eta_g = np.ones(numGroup, dtype=np.float64)
+    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
+    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+
+    a_ss = a // 2  # single side
+    b_ss = b // 2  # single side
+
+    # define groups
+    # (i,j) is the center pixel of each group
+    groupIdx = 0
+    for j in range(b_ss, n - b_ss):
+        for i in range(a_ss, m - a_ss):
+            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
+            top_left_i, top_left_j = i - a_ss, j - b_ss
+            indMatrix[top_left_i:(top_left_i + a), top_left_j:(top_left_j + b)] = True
+            varsIdx = np.where(indMatrix.flatten(order='F'))
+            groups_var[varsIdx, groupIdx] = True
+            groupIdx += 1
+
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
 
     return graph
 
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
-def prox(G_S, lambda1, graph):
+def prox(G_S, lambda1, graph, num_threads=1):
     regul = 'graph'
-    num_threads = -1  # all cores (-1 by default)
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
     intercept = False  # can be used with all the other regularizations
@@ -66,7 +100,23 @@ def prox(G_S, lambda1, graph):
                                intercept=intercept, regul=regul)
 
 
-def inexact_alm_lsd(D0, graph, L0=None):
+def prox_by_frame(G_S, lambda1, graphs, num_threads=1):
+    regul = 'graph'
+    verbose = False  # verbosity, false by default
+    pos = False  # can be used with all the other regularizations
+    intercept = False  # can be used with all the other regularizations
+
+    result = np.zeros_like(G_S)
+    for frame_idx in range(G_S.shape[1]):
+        result[:, [frame_idx]] = spams.proximalGraph(G_S[:, [frame_idx]], graphs[frame_idx], False,
+                                                     lambda1=lambda1, numThreads=num_threads,
+                                                     verbose=verbose, pos=pos,
+                                                     intercept=intercept, regul=regul)
+
+    return result
+
+
+def inexact_alm_lsd(D0, graphs):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -74,10 +124,13 @@ def inexact_alm_lsd(D0, graph, L0=None):
     else:
         D = D0
 
+    use_prox_by_frame = isinstance(graphs, np.ndarray)
+
     m, n = D.shape
     d = np.min(D.shape)
 
-    lambda_param = 1 / np.sqrt(m)
+    delta = 10
+    lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
 
     # initialize
     Y = D
@@ -87,50 +140,48 @@ def inexact_alm_lsd(D0, graph, L0=None):
     Y = Y / dual_norm
 
     mu = 12.5 / norm_two  # can be tuned
-    rho = 1.5
+    rho = 1.6
     tol_out = 1e-7
 
     # TODO: start with known background? start with first frame?
-    L = np.zeros(D.shape, order='F') if L0 is None else L0
+    # L = np.zeros(D.shape, order='F')
     S = np.zeros(D.shape, order='F')
 
     converged = False
+    max_iter = 500
     iter_out = 0
     sv = 10
 
     while not converged:  # Algorithm line 2
         iter_out += 1
 
+        # SOLVE FOR L
         G_L = D - S + Y / mu  # Algorithm line 4
 
-        # matlab algorithm add another condition here (choosvd)
-        u, s, vh = LA.svd(G_L, full_matrices=False)
-        s = s[0:sv]
+        u, s, vh = svd_k_largest(G_L, sv)
 
         # soft-thresholding
-        last_nonzero_sv_idx = np.max(np.nonzero(s - 1 / mu > 0))
-        svn = last_nonzero_sv_idx + 1
+        last_nonzero_sv_idx = get_last_nonzero_idx(s - 1 / mu > 0)
+        svp = last_nonzero_sv_idx + 1
 
-        svp = svn
-        ratio = s[:-1] / s[1:]
-        max_ratio, max_idx = maxWithIdx(ratio)
-        if max_ratio > 2:
-            svp = min(svn, max_idx + 1)
+        # predicting the number of s.v bigger than 1/mu
+        # ratio = s[:-1] / s[1:]
+        # max_ratio, max_idx = maxWithIdx(ratio)
+        # svn = svp if max_ratio <= 2 else min(svp, max_idx + 1)
+        # sv = svn + 1 if svn < sv else min(svn + round(0.05 * d), d)
 
-        if svp < sv:
-            sv = min(svp + 1, d)
-        else:
-            sv = min(svp + round(0.05 * d), d)
+        sv = svp + 1 if svp < sv else min(svp + round(0.05 * d), d)
 
-        # print(f'1/mu: {1/mu:.2f}')
-        # print(f's: {s}')
+        L = svd_reconstruct(u[:, :svp], s[:svp] - 1 / mu, vh[:svp, :], order='F')  # Algorithm line 5
 
-        L = multiMatmul(u[:, :svp], np.diag(s[:svp] - 1 / mu, 0), vh[:svp, :], order='F')  # Algorithm line 5
-        # A = np.asfortranarray(u[:, 0:sv_count] @ np.diag(s - 1/mu, 0) @ vh[0:sv_count, :])  # Algorithm line 5
+        # SOLVE FOR S
         G_S = D - L + Y / mu  # Algorithm line 7
 
-        S = prox(G_S, lambda_param / mu, graph)  # Algorithm line 8
+        # Algorithm line 8
+        S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
+            else prox(G_S, lambda_param / mu, graphs)
 
+        # UPDATE Y, mu
         Z = D - L - S
         Y = Y + mu * Z  # Algorithm line 9
         mu = min(mu * rho, mu * 1e7)  # Algorithm line 10 (+limit max mu)
@@ -139,13 +190,16 @@ def inexact_alm_lsd(D0, graph, L0=None):
         err = LA.norm(Z, ord='fro') / LA.norm(D, ord='fro')
 
         # print iteration info
-        print(f'Iteration: {iter_out:3d} rank(A): {svp:2d} ||E||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
+        print(f'Iteration: {iter_out:3d} rank(L): {svp:2d} ||S||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
 
         if err < tol_out:
             print('CONVERGED')
             converged = True
+        elif iter_out >= max_iter:
+            print('CONVERGED')
+            break
 
-    return L, S, iter_out
+    return L, S, iter_out, converged
 
 
 def normalizeImage(image):
@@ -154,7 +208,7 @@ def normalizeImage(image):
     image *= 1.0 / np.max(image)
 
 
-def foregound_mask(S, D, L):
+def foreground_mask(S, D, L):
     S_abs = np.abs(S)
     S_back_temp = S_abs < 0.5 * np.max(S_abs)
     S_diff = np.abs(D - L) * S_back_temp
@@ -186,7 +240,23 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4, L0=None):
+def main():
+    np.random.seed(0)
+
+    # set print precision to 2 decimal points
+    np.set_printoptions(precision=2)
+
+    # import video
+    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
+    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
+
+    original_shape = ImData0.shape
+
+    # cut to selected frame range and downsample
+    frame_start = 0
+    frame_end = 47
+    downsample_ratio = 4
+
     ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
     # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
 
@@ -202,27 +272,31 @@ def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4, L0=None):
 
     # build graph for spams.proximalGraph
     BLOCK_SIZE = (3, 3)
-    graph = getGraphSPAMS((w, h), BLOCK_SIZE)
+    graph = getGraphSPAMS_all_groups((w, h), BLOCK_SIZE)
+    graphs = np.full(frames, graph)  # duplicate to test prox_by_frame
 
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations = inexact_alm_lsd(D, graph)
+    L, S, iterations, converged = inexact_alm_lsd(D, graphs)
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
-    S_mask = foregound_mask(S, D, L).reshape(original_downsampled_shape, order='F')
+    S = foreground_mask(S, D, L)
+    S_mask = S.reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
-    #    print('Plotting...')
-    #    subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
+    print('Plotting...')
+    subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
 
-    return L, S, L_recon, S_mask, ImMean
+    return L
 
 
 if __name__ == '__main__':
     print('START')
-    os.chdir('watersurface')
-    #L0 = main()
+    start = time.time()
+    L0 = main()
     # main(L0)
+    end = time.time()
     print('DONE')
+    print(f'ELAPSED TIME: {(end - start):.3f} seconds')
