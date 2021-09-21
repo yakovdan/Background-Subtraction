@@ -1,3 +1,6 @@
+import argparse
+import sys
+
 import numpy as np
 from numpy import linalg as LA
 
@@ -145,24 +148,32 @@ def check_BS_operator():
     print(block_shrinkage_result)
 
 
-def load_data(video_length, cut_length=None):
+def load_data(video_length, cut_length=None, path_to_data=None, path_to_input=None):
+    if path_to_data is not None:
+        data_root = path_to_data
+    else:
+        data_root = "."
     image_mean = 0.4233611323018794
 
     if cut_length is None:
         cut_length = video_length
 
-    lowrank_mat = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/Lowrank1_highway.bin',
+    lowrank_mat = load_mat_from_bin(data_root+'/highway_200frames/Lowrank1_highway.bin',
                                     np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
-    sparse_mat = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/Sparse1_highway.bin',
+    sparse_mat = load_mat_from_bin(data_root+'/highway_200frames/Sparse1_highway.bin',
                                    np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
 
     lowrank_reconstructed = lowrank_mat + image_mean
 
     # sparse_cube is in [t,h,w] order so transpose
-    sparse_cube = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/sparse_cube_200.bin',
+    sparse_cube = load_mat_from_bin(data_root+'/highway_200frames/sparse_cube_200.bin',
                                     np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
 
-    video_list = glob.glob("./input/*.jpg")
+    if path_to_input is not None:
+        input_root = path_to_input
+    else:
+        input_root = "."
+    video_list = glob.glob(input_root+"/input/*.jpg")
     video_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
     video_list = video_list[:cut_length]
 
@@ -178,7 +189,8 @@ def load_data(video_length, cut_length=None):
     return Data, DataMean, lowrank_mat, sparse_mat, sparse_cube
 
 
-def main():
+def main(path_to_data=None, path_to_input=None, path_to_output=None):
+
     video_length = 200
     cut_length = 200
     np.random.seed(0)
@@ -189,7 +201,7 @@ def main():
     delta = 10
 
     print("LOAD DATA")
-    Data, DataMean, lowrank_mat, sparse_mat, sparse_cube = load_data(video_length, cut_length)
+    Data, DataMean, lowrank_mat, sparse_mat, sparse_cube = load_data(video_length, cut_length, path_to_data, path_to_input)
 
     groups_by_frame, weights_by_frame = run_motion_saliency_check(Data, lowrank_mat, sparse_mat, sparse_cube, delta=delta)
 
@@ -200,20 +212,32 @@ def main():
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
 
     # mask S and reshape back to 3d array
-    S = foreground_mask(S, D, L)
-    # normalizeImage(S)
+#    S = foreground_mask(S, D, L)
+    S_bin = normalizeSparseMat(S)
+    normalizeImage(S)
     S_mask = S.reshape(original_shape, order='F')
+    S_mask_bin = S_bin.reshape(original_shape, order='F')
     L_recon = L.reshape(original_shape, order='F') + DataMean
     Data += DataMean
 
     print('Plotting...')
     subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
+    if path_to_output is not None:
+        output_root = path_to_output
+    else:
+        output_root = "."
+    output_result_bitmap_seq(output_root+'/output/', S_mask, S_mask_bin, L_recon, Data)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run group sparse')
+    parser.add_argument('--input', type=str, default=".", help='Path to input folder with jpg frames')
+    parser.add_argument('--output', type=str, default=".", help='Path to output folder where output frames will be saved')
+    parser.add_argument('--data', type=str, default=".", help='Path to data folder where binary matrices are stored')
+    args = parser.parse_args()
     print('START')
     start = time.time()
-    main()
+    main(args.data, args.input, args.output)
     end = time.time()
     print('DONE')
     print(f'ELAPSED TIME: {(end-start):.3f} seconds')
