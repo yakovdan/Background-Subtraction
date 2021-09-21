@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from utils import *
 import time
 
+
 def getGraphSPAMS_all_groups(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
         raise "Input lengths are incorrect"
@@ -200,19 +201,6 @@ def inexact_alm_lsd(D0, graphs):
             break
 
     return L, S, iter_out, converged
-
-
-def foreground_mask(S, D, L):
-    S_abs = np.abs(S)
-    S_back_temp = S_abs < 0.5 * np.max(S_abs)
-    S_diff = np.abs(D - L) * S_back_temp
-    positive_S_diff = S_diff[S_diff > 0]
-    mu_s = np.mean(positive_S_diff)
-    sigma_s = np.std(positive_S_diff)
-    th = mu_s + 2 * sigma_s
-    mask = S_abs > th
-    return mask
-
 
 def subplots_samples(sources, idx, size_factor=1):
     # plot sources on the rows and idxs on the columns
