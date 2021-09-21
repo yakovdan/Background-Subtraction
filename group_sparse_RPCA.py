@@ -52,6 +52,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
 
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
     non_block_lambda = 8e2 * lambda_param
+    MAX_RANK = d + 1
 
     # initialize
     Y = D
@@ -114,6 +115,9 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
             converged = True
         elif iter_out >= max_iter:
             print('DIDNT CONVERGED')
+            break
+        elif svp >= MAX_RANK:
+            print('L reached rank ' + str(MAX_RANK))
             break
 
     return L, S, iter_out, converged
@@ -208,7 +212,8 @@ def main():
     normalizeImage(S_reshaped)
 
     print('Plotting...')
-    subplots_samples((S_mask_3, S_mask_2, S_reshaped, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
+    N = 6
+    subplots_samples((S_mask_3, S_mask_2, S_reshaped, L_recon, Data), range(0, cut_length, cut_length // N), size_factor=2)
 
 
 if __name__ == '__main__':
