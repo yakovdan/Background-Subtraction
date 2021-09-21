@@ -214,3 +214,35 @@ def normalizeImage(image):
     """ Normalize image so that (min, max) -> (0, 1) """
     image -= np.min(image)
     image *= 1.0 / np.max(image)
+
+
+def normalizeSparseMat(image):
+    """
+    takes
+    """
+
+    new_image = np.abs(image)
+    new_image -= np.min(new_image)
+    new_image *= 1.0 / np.max(new_image)
+    binary_image = np.zeros_like(new_image)
+    mask_mean = np.mean(new_image)
+    mask_std = np.std(new_image)
+    binary_image[new_image > mask_mean + 2*mask_std] = 1.0
+    return binary_image
+
+
+def output_result_bitmap_seq(folder_name, sparse_mask, sparse_mask_bin, lowrank_recon, data):
+    """
+    This function takes a folder name and write frames to it
+    where each frame is a concatenation of a data frame, low rank frame, sparse frame and sparse mask frame
+    """
+    video_data = np.zeros((data.shape[0], 4*data.shape[1], data.shape[2]), dtype=np.uint8)
+    for i in range(data.shape[2]):
+        data_out = (data[:, :, i]*255).astype(np.uint8)
+        lowrank_out = (lowrank_recon[:, :, i]*255).astype(np.uint8)
+        sparse_out = (sparse_mask[:, :, i]*255).astype(np.uint8)
+        sparse_bin_out = (sparse_mask_bin[:, :, i]*255).astype(np.uint8)
+        output_frame = np.concatenate((data_out, lowrank_out, sparse_out, sparse_bin_out), axis=1)
+        video_data[:, :, i] = output_frame
+        cv2.imwrite(folder_name+f"frame_{i}.bmp", output_frame)
+
