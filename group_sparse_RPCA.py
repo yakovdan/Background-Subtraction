@@ -199,14 +199,16 @@ def main():
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
 
     # mask S and reshape back to 3d array
-    S = foreground_mask(S, D, L)
-    # normalizeImage(S)
-    S_mask = S.reshape(original_shape, order='F')
+    S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=2).reshape(original_shape, order='F')
+    S_mask_3 = foreground_mask(D, L, S, sigmas_from_mean=2).reshape(original_shape, order='F')
     L_recon = L.reshape(original_shape, order='F') + DataMean
     Data += DataMean
 
+    S_reshaped = S.reshape(original_shape, order='F')
+    normalizeImage(S_reshaped)
+
     print('Plotting...')
-    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
+    subplots_samples((S_mask_3, S_mask_2, S_reshaped, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
 
 
 if __name__ == '__main__':

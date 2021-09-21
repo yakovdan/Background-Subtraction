@@ -202,6 +202,7 @@ def inexact_alm_lsd(D0, graphs):
 
     return L, S, iter_out, converged
 
+
 def subplots_samples(sources, idx, size_factor=1):
     # plot sources on the rows and idxs on the columns
     figsize = (size_factor * len(idx), size_factor * len(sources))
@@ -249,7 +250,7 @@ def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4):
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
-    S = foreground_mask(S, D, L)
+    S = foreground_mask(D, L, S)
     S_mask = S.reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
 
