@@ -55,6 +55,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
 
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
     non_block_lambda = 8e2 * lambda_param
+    MAX_RANK = d + 1
 
     # initialize
     Y = D
@@ -118,6 +119,9 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
         elif iter_out >= max_iter:
             print('DIDNT CONVERGE')
             break
+        elif svp >= MAX_RANK:
+            print('L reached rank ' + str(MAX_RANK))
+            break
 
     return L, S, iter_out, converged
 
@@ -148,32 +152,23 @@ def check_BS_operator():
     print(block_shrinkage_result)
 
 
-def load_data(video_length, cut_length=None, path_to_data=None, path_to_input=None):
-    if path_to_data is not None:
-        data_root = path_to_data
-    else:
-        data_root = "."
+def load_data(video_length, cut_length=None):
     image_mean = 0.4233611323018794
 
     if cut_length is None:
         cut_length = video_length
 
-    lowrank_mat = load_mat_from_bin(data_root+'/highway_200frames/Lowrank1_highway.bin',
+    lowrank_mat = load_mat_from_bin('./highway_200frames/Lowrank1_highway.bin',
                                     np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
-    sparse_mat = load_mat_from_bin(data_root+'/highway_200frames/Sparse1_highway.bin',
+    sparse_mat = load_mat_from_bin('./highway_200frames/Sparse1_highway.bin',
                                    np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
-
     lowrank_reconstructed = lowrank_mat + image_mean
 
     # sparse_cube is in [t,h,w] order so transpose
-    sparse_cube = load_mat_from_bin(data_root+'/highway_200frames/sparse_cube_200.bin',
+    sparse_cube = load_mat_from_bin('./highway_200frames/sparse_cube_200.bin',
                                     np.float64, (320, 240, video_length))[:, :, :cut_length].transpose((1, 0, 2))
 
-    if path_to_input is not None:
-        input_root = path_to_input
-    else:
-        input_root = "."
-    video_list = glob.glob(input_root+"/input/*.jpg")
+    video_list = glob.glob("./input/*.jpg")
     video_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
     video_list = video_list[:cut_length]
 
@@ -212,16 +207,18 @@ def main(path_to_data=None, path_to_input=None, path_to_output=None):
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
 
     # mask S and reshape back to 3d array
-#    S = foreground_mask(S, D, L)
-    S_bin = normalizeSparseMat(S)
-    normalizeImage(S)
-    S_mask = S.reshape(original_shape, order='F')
-    S_mask_bin = S_bin.reshape(original_shape, order='F')
+    S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=2).reshape(original_shape, order='F')
+    S_mask_3 = foreground_mask(D, L, S, sigmas_from_mean=2).reshape(original_shape, order='F')
     L_recon = L.reshape(original_shape, order='F') + DataMean
     Data += DataMean
 
+    S_reshaped = S.reshape(original_shape, order='F')
+    normalizeImage(S_reshaped)
+
     print('Plotting...')
-    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
+    N = 6
+    subplots_samples((S_mask_3, S_mask_2, S_reshaped, L_recon, Data), range(0, cut_length, cut_length // N), size_factor=2)
+
     if path_to_output is not None:
         output_root = path_to_output
     else:
