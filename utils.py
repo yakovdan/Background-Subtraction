@@ -231,7 +231,7 @@ def normalizeSparseMat(image):
     return binary_image
 
 
-def output_result_bitmap_seq(folder_name, sparse_mask, sparse_mask_bin, lowrank_recon, data):
+def output_result_bitmap_seq(folder_name, data,  lowrank_recon, sparse_mask, sparse_mask_bin):
     """
     This function takes a folder name and write frames to it
     where each frame is a concatenation of a data frame, low rank frame, sparse frame and sparse mask frame
