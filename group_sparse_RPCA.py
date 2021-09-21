@@ -14,7 +14,7 @@ def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu):
     lambdas_by_frame[frame, group] - lambda for each block
     mu - number
     """
-    result = np.zeros_like(G)  # arbitrarily large value for anything outside of the groups
+    result = np.copy(G)  # arbitrarily large value for anything outside of the groups
     for frame_idx in range(len(blocks_by_frame)):  # run over frames
         blocks = blocks_by_frame[frame_idx]  # get the blocks of that frame
         lambdas = lambdas_by_frame[frame_idx]
@@ -30,7 +30,7 @@ def block_shrinkage_operator(G, blocks_by_frame, lambdas_by_frame, mu):
     return result
 
 
-def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=10, use_sv_prediction=true):
+def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=10, use_sv_prediction=True):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -51,7 +51,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
     Y = Y / dual_norm
 
     mu = 1.25 / norm_two  # can be tuned
-    rho = 1.6
+    rho = 1.1
     tol_out = 1e-7
 
     # L = np.zeros(D.shape, order='F') if L0 is None else L0
@@ -134,12 +134,12 @@ def check_BS_operator():
 def load_data(video_length):
     image_mean = 0.4233611323018794
 
-    lowrank_mat = load_mat_from_bin('./highway_200frames/Lowrank1_highway.bin', np.float64, (320, 240, video_length))
-    sparse_mat = load_mat_from_bin('./highway_200frames/Sparse1_highway.bin', np.float64, (320, 240, video_length))
+    lowrank_mat = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/Lowrank1_highway.bin', np.float64, (320, 240, video_length))
+    sparse_mat = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/Sparse1_highway.bin', np.float64, (320, 240, video_length))
     lowrank_reconstructed = lowrank_mat + image_mean
 
     # sparse_cube is in [t,h,w] order so transpose
-    sparse_cube = load_mat_from_bin('./highway_200frames/sparse_cube_200.bin', np.float64, (320, 240, video_length))
+    sparse_cube = load_mat_from_bin('D:/Masters/Background-Subtraction_guybranch_latest/Background-Subtraction/highway_200frames/sparse_cube_200.bin', np.float64, (320, 240, video_length))
     video_list = glob.glob("./input/*.jpg")
     video_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
     video_list = video_list[:video_length]
@@ -183,7 +183,7 @@ def main():
     Data += DataMean
 
     print('Plotting...')
-    subplots_samples((S_mask, L_recon, Data), [0, 40, 80, 120, 160, 199], size_factor=2)
+    subplots_samples((S_mask.transpose((1, 0, 2)), L_recon.transpose((1, 0, 2)), Data.transpose((1, 0, 2))), [0, 40, 80, 120, 160, 199], size_factor=2)
 
 
 if __name__ == '__main__':
