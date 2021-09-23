@@ -29,7 +29,7 @@ def compute_RPCA(image_array, grayscale, max_error):
     S_array = np.zeros(image_array.shape, dtype=image_array.dtype)
 
     # prepare RPCA object.
-    rpca = RobustPCA(max_iter=200000, use_fbpca=True, max_rank=1, tol=max_error, verbose=True)
+    rpca = RobustPCA(max_iter=200000, use_fbpca=True, max_rank=1, tol=max_error, verbose=False)
 
     # start log
     # perform RPCA for each image and each color channel separately
@@ -93,7 +93,7 @@ def executeSaliencyRPCA(ImData, downsample_ratio, grayscale_workmode=True, grays
 
     # compute decomposition for Y-T plane
     print("Starting yt RPCA")
-    yt_lowrank, yt_sparse = compute_RPCA(yt_plane, "yt_plane", grayscale_workmode,
+    yt_lowrank, yt_sparse = compute_RPCA(yt_plane, grayscale_workmode,
                                          yt_plane.shape[1] * yt_plane.shape[2] * 0.0001)
     # save_images(yt_sparse, args.output+f"output_yt_sparse_{idx}", grayscale_workmode)
     # save_images(yt_lowrank, args.output+f"output_yt_lowrank_{idx}", grayscale_workmode)
