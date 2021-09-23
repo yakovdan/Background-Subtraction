@@ -7,6 +7,8 @@ import glob
 from functools import reduce
 from numpy import linalg as LA
 from scipy.sparse.linalg import svds
+from datetime import datetime
+
 
 def create_folder(name):
     if os.path.exists(name):
@@ -15,20 +17,20 @@ def create_folder(name):
     os.mkdir(name)
 
 
-def prepare_saliency_folders(idx):
-    create_folder(f"output_xt_{idx}")
-    create_folder(f"output_yt_{idx}")
-    create_folder(f"output_xt_sparse_{idx}")
-    create_folder(f"output_xt_lowrank_{idx}")
-    create_folder(f"output_yt_sparse_{idx}")
-    create_folder(f"output_yt_lowrank_{idx}")
+def prepare_saliency_folders(output_path, idx):
+    create_folder(output_path + f"output_xt_{idx}")
+    create_folder(output_path + f"output_yt_{idx}")
+    create_folder(output_path + f"output_xt_sparse_{idx}")
+    create_folder(output_path + f"output_xt_lowrank_{idx}")
+    create_folder(output_path + f"output_yt_sparse_{idx}")
+    create_folder(output_path + f"output_yt_lowrank_{idx}")
 
 
-def bitmap_to_mat(bitmap_seq, grayscale=False):
+def bitmap_to_mat(bitmap_seq, grayscale=True):
     """
     bitmap_to_mat takes a list of image filenames and returns
     a numpy 4D array of those images, dtype is uint8
-    matrix structure is (image_num,h,w,c)
+    matrix structure is (h,w,t)
     assumption: all images have the same dimensions
     """
     image_count = len(bitmap_seq)
@@ -41,32 +43,34 @@ def bitmap_to_mat(bitmap_seq, grayscale=False):
         if shape is None:  # first image read
             shape = img.shape
             if grayscale:
-                matrix = np.zeros((image_count, shape[0], shape[1]), dtype=np.uint8)
+                matrix = np.zeros((shape[0], shape[1], image_count), dtype=np.uint8)
             else:
-                matrix = np.zeros((image_count, shape[0], shape[1], shape[2]), dtype=np.uint8)
+                matrix = np.zeros((shape[0], shape[1], shape[2], image_count), dtype=np.uint8)
         assert img.shape == shape
         if grayscale:
-            matrix[count, :, :] = img
+            matrix[:, :, count] = img
         else:
-            matrix[count, :, :, :] = img
+            matrix[:, :, :, count] = img
         count = count + 1
     return matrix
 
 
-def import_video_as_frames(num_frames):
-    # import video
-    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
-    # sort frames in ascending number order because glob can return filenames in any order
-    frames_list = glob.glob('./input/*.jpg')
-    frames_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
-    frames_list = frames_list[:num_frames]
-    video_data = bitmap_to_mat(frames_list, grayscale=True).astype(np.float64)
-    ImData0 = np.asfortranarray(video_data.transpose((1, 2, 0)).astype(np.float64))
+def import_video_as_frames(path, start, end):
+    """
+    import video
+    using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
+    sort frames in ascending number order because glob can return filenames in any order
 
-    # ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
-    # image_list = glob.glob("./input/*.jpg")
-    # image_list.sort(key=lambda f: int("".join(filter(str.isdigit, f))))[:100]
-    original_shape = ImData0.shape
+    video_data is in [t,h,w] order and is a c-order array
+    ImData0 is in [h,w, t] order and is a fortran array
+
+    """
+    frames_list = glob.glob(path+'*.jpg')
+    frames_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
+    frames_list = frames_list[start:end]
+    bitmap_seq = bitmap_to_mat(frames_list, grayscale=True).astype(np.float64)
+    video_data = np.ascontiguousarray(bitmap_seq.transpose((2, 0, 1)))
+    ImData0 = np.asfortranarray(bitmap_seq)
     return ImData0, video_data
 
 
@@ -165,16 +169,6 @@ def multiMatmul(*matrices, order='C'):
     return reduce(lambda result, mat: np.matmul(result, mat, order=order), matrices)
 
 
-def resize_with_cv2(images, ratio):
-    result_size = [int(np.ceil(images.shape[i]*ratio)) for i in [0, 1]]
-    T = images.shape[2]
-    result = np.empty(result_size + [T])
-    interpolation = cv2.INTER_AREA if ratio < 1 else cv2.INTER_CUBIC
-    for t in range(T):
-        result[:, :, t] = cv2.resize(images[:, :, t], result_size[::-1], interpolation=interpolation)
-    return result
-
-
 def svd_reconstruct(u, s, vh, order='C'):
     return np.matmul(u * s, vh, order=order)
 
@@ -246,3 +240,10 @@ def output_result_bitmap_seq(folder_name, data,  lowrank_recon, sparse_mask, spa
         video_data[:, :, i] = output_frame
         cv2.imwrite(folder_name+f"frame_{i}.bmp", output_frame)
 
+
+def write_log_to_file(filename, args):
+    now = datetime.now()
+    with open(filename, "a") as logfile:
+        logfile.write(f"Starting computation at {now}\n")
+        for key, value in vars(args).items():
+            logfile.write(f"{key} : {value}\n")

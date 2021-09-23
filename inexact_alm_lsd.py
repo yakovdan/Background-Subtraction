@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 from numpy import linalg as LA
 import spams
@@ -23,8 +24,8 @@ def getGraphSPAMS_all_groups(img_shape, batch_shape):
 
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
+    groups_var = ssp.lil_matrix((m * n, numGroup), dtype=bool)
 
     # define groups
     for j in range(numY):
@@ -223,7 +224,7 @@ def subplots_samples(sources, idx, size_factor=1):
     plt.show()
 
 
-def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4):
+def LSD(ImData0, frame_start, frame_end, downsample_ratio):
 
     ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
     # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
@@ -250,14 +251,15 @@ def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4):
     print(f'iterations: {iterations}')
 
     # mask S and reshape back to 3d array
-    S = foreground_mask(D, L, S)
-    S_mask = S.reshape(original_downsampled_shape, order='F')
-    L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
+    S_mask = foreground_mask(D, L, S)
+    S = S.reshape(original_downsampled_shape, order='F')
+    S_mask = S_mask.reshape(original_downsampled_shape, order='F')
+    L_reshaped = L.reshape(original_downsampled_shape, order='F')
 
-    return S_mask, L_recon, ImData1
+    return S, S_mask, L_reshaped, ImData1, ImMean, original_downsampled_shape
 
 
-def main():
+def main(args):
     np.random.seed(0)
 
     # set print precision to 2 decimal points
@@ -265,20 +267,42 @@ def main():
 
     # import video
     # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
-    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
-
+    ImData0, _ = import_video_as_frames(args.input, args.frame_start, args.frame_end)
     original_shape = ImData0.shape
 
-    S_mask, L_recon, ImData1 = LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4)
+    S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD(ImData0,
+                                                                    frame_start=args.frame_start,
+                                                                    frame_end=args.frame_end,
+                                                                    downsample_ratio=args.downscale)
 
-    print('Plotting...')
-    subplots_samples((S_mask, L_recon, ImData1), [0, 10, 20, 30, 40], size_factor=2)
+    np.save(args.output+"sparse", S)
+    np.save(args.output+"sparse.bin", S_mask)
+    np.save(args.output+"lowrank", L)
+    np.save(args.output+"data", ImData1)
+    with open(args.output+'numerical_values.txt', 'w') as num_vals:
+        num_vals.write(f"ImMean: {ImMean}, original downsampled shape: {original_downsampled_shape}\n")
+
+    if args.plot:
+        print('Plotting...')
+        subplots_samples((S_mask, L+ImMean, ImData1), [0, 10, 20, 30, 40], size_factor=2)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='run LSD')
+    parser.add_argument('--input', type=str, default=".", help='path to input folder with jpg frames')
+    parser.add_argument('--output', type=str, default=".", help='path to output folder to store binary results')
+    parser.add_argument('--frame_start', type=int, default=0, help='start frame index')
+    parser.add_argument('--frame_end', type=int, default=2000, help='end frame index, inclusive')
+    parser.add_argument('--downscale', type=int, default=1, help='downscale factor')
+    parser.add_argument('--plot', type=bool, default=False, help='plot or not')
+    args = parser.parse_args()
+
     print('START')
+    write_log_to_file(args.output+'computelog.txt', args)
     start = time.time()
-    main()
+    main(args)
     end = time.time()
     print('DONE')
     print(f'ELAPSED TIME: {(end - start):.3f} seconds')
+    with open(args.output+'computelog.txt', 'a') as f:
+        f.write(f'ELAPSED TIME: {(end - start):.3f} seconds')
