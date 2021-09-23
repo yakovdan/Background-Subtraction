@@ -91,7 +91,7 @@ def getGraphSPAMS_group_centers(img_shape, group_shape, group_centers=None):
 
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
-def prox(G_S, lambda1, graph, num_threads=1):
+def prox(G_S, lambda1, graph, num_threads=3):
     regul = 'graph'
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
@@ -102,7 +102,7 @@ def prox(G_S, lambda1, graph, num_threads=1):
                                intercept=intercept, regul=regul)
 
 
-def prox_by_frame(G_S, lambda1, graphs, num_threads=1):
+def prox_by_frame(G_S, lambda1, graphs, num_threads=3):
     regul = 'graph'
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
