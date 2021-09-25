@@ -12,6 +12,8 @@ import time
 from skimage.morphology import (erosion, dilation, opening, closing)
 from skimage.morphology import (rectangle, diamond, disk)
 
+from joblib import Parallel, delayed
+
 
 def get_proximal_flat_groups_nonoverlap(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
@@ -51,33 +53,37 @@ def get_proximal_graph_nonoverlap(img_shape, batch_shape):
 
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
+
+    indptr = [0] * (numGroup+1)  # number of elements in each col
+    indices = []
 
     # define groups
     groupIdx = 0
     for j in range(0, n - b + 1, b):
         for i in range(0, m - a + 1, a):
-            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
-            indMatrix[i:(i + a), j:(j + b)] = True
-            varsIdx = np.where(indMatrix.flatten(order='F'))
-            groups_var[varsIdx, groupIdx] = True
+            varsIdx = get_vars_idx_top_left(i, j, (a,b), img_shape)
+            indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
+            indices.extend(varsIdx)
             groupIdx += 1
 
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+    data = np.full(len(indices), True)
+    groups_var = ssp.csc_matrix((data, indices, indptr), shape=(m * n, numGroup), dtype=bool)
+
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
 
     return graph
 
 
-def get_proximal_graph_group_centers(img_shape, group_size, group_centers=None):
+def get_proximal_graph_group_centers(img_shape, group_size, group_centers):
     """
     img_shape = (width, height) of image
     group_shape = (width, height) of groups - odd when using group_centers
     group_centers = 2D weights matrix of centers locations, or None to use all groups
     """
 
-    if group_centers is None:
-        return getGraphSPAMS_all_groups(img_shape, group_size)
+    # if group_centers is None:
+    #     return getGraphSPAMS_all_groups(img_shape, (group_size, group_size))
 
     m = img_shape[0]
     n = img_shape[1]
@@ -86,8 +92,10 @@ def get_proximal_graph_group_centers(img_shape, group_size, group_centers=None):
 
     # init graph parameters
     eta_g = np.zeros(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
+
+    indptr = [0] * (numGroup+1) # number of elements in each col
+    indices = []
 
     centers_cols, centers_rows = np.where(group_centers.T > 0)  # transpose to run over cols
 
@@ -104,18 +112,14 @@ def get_proximal_graph_group_centers(img_shape, group_size, group_centers=None):
         eta_g[groupIdx] = group_centers[i, j]
 
         # set group mask
-        indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
-        top_left_i, top_left_j = i - group_radius, j - group_radius
+        varsIdx = get_vars_idx_center(i, j, group_radius, img_shape)
+        indptr[groupIdx+1] = indptr[groupIdx] + len(varsIdx)
+        indices.extend(varsIdx)
 
-        i_start, i_finish = [clamp(i, 0, m) for i in (top_left_i, top_left_i + group_width)]
-        j_start, j_finish = [clamp(j, 0, n) for j in (top_left_j, top_left_j + group_width)]
+    data = np.full(len(indices), True)
+    groups_var = ssp.csc_matrix((data, indices, indptr), shape=(m * n, numGroup), dtype=bool)
 
-        indMatrix[i_start:i_finish,
-        j_start:j_finish] = True
-        varsIdx = np.where(indMatrix.flatten(order='F'))
-        groups_var[varsIdx, groupIdx] = True
-
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
 
     return graph
 
@@ -377,7 +381,6 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0):
     mask_percent = calc_mask_percent(weight_mask) * 100
     print(f'mask percentage: {mask_percent:.2f}%')
 
-
     # plot for debugging
     # normalized_weight_mask = 1 / weight_mask.copy()
     # normalizeImage(normalized_weight_mask)
@@ -388,14 +391,21 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0):
     #                  size_factor=4)
 
     print('Building graphs...')
+    t0 = time.time()
     group_radius = 1
-    graphs = [get_proximal_graph_group_centers(weight_mask[:, :, i].shape,
-                                               group_radius,
-                                               group_centers=weight_mask[:, :, i])
-              for i in range(weight_mask.shape[-1])]
+    if USE_PARALLEL:
+        graphs = Parallel(n_jobs=2)(delayed(get_proximal_graph_group_centers) \
+                                        (weight_mask[:, :, i].shape, group_radius, weight_mask[:, :, i]) for i in
+                                    range(weight_mask.shape[-1]))
+    else:
+        graphs = [get_proximal_graph_group_centers(weight_mask[:, :, i].shape,
+                                                   group_radius,
+                                                   group_centers=weight_mask[:, :, i])
+                  for i in range(weight_mask.shape[-1])]
+    t1 = time.time()
+    print(f'Graphs time: {t1-t0:.2f}s')
 
     background_masks = [(weight_mask[:, :, i] < 0).flatten(order='F') for i in range(weight_mask.shape[-1])]
-
 
     return graphs, background_masks
 
@@ -424,6 +434,7 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
     weights = (1, 1.5)
     graphs, background_masks = build_improved_LSD_graphs(D, original_downsampled_shape, weights, delta=1.0)
 
+    print('Running LSD...')
     L, S, iterations, converged = inexact_alm_lsd_with_background(D, graphs, background_masks)
 
     # mask S and reshape back to 3d array
@@ -443,7 +454,7 @@ def main():
     # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
     ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
 
-    downsample_ratio = 1
+    downsample_ratio = 4
     frame_start = 0
     frame_end = 47
 
@@ -469,6 +480,10 @@ def main():
 
 if __name__ == '__main__':
     print('START')
+
+    enabled_str = '*ENABLED* :)' if USE_PARALLEL else 'DISABLED :('
+    print(f'CORES: {num_cores}. Parallel processing {enabled_str}\n')
+
     start = time.time()
     main()
     end = time.time()

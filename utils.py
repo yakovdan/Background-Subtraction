@@ -7,6 +7,13 @@ import glob
 from functools import reduce
 from numpy import linalg as LA
 from scipy.sparse.linalg import svds
+import multiprocessing
+
+num_cores = multiprocessing.cpu_count()
+USE_PARALLEL = False
+
+def get_usable_cores():
+    return num_cores - 1
 
 def create_folder(name):
     if os.path.exists(name):
@@ -218,3 +225,33 @@ def normalizeImage(image):
 
 def clamp(n, minn, maxn):
     return max(min(maxn, n), minn)
+
+
+def sub2indF(i, j, array_shape):
+    return j*array_shape[0] + i
+
+
+def get_vars_idx_center(i, j, group_radius, img_shape):
+    rows, cols = img_shape
+
+    left = min(group_radius, j)
+    right = min(group_radius, cols - 1 - j)
+    top = min(group_radius, i)
+    bottom = min(group_radius, rows - 1 - i)
+
+    top_left_idx = sub2indF(i - top, j - left, img_shape)
+
+    horiz_width = left + right + 1
+    vert_width = top + bottom + 1
+    return [top_left_idx + di + rows * dj for dj in range(horiz_width) for di in range(vert_width)]
+
+
+def get_vars_idx_top_left(i, j, group_shape, img_shape):
+    rows, cols = img_shape
+
+    bottom = min(group_shape[0], rows - 1 - i)
+    right = min(group_shape[1], cols - 1 - j)
+
+    top_left_idx = sub2indF(i, j, img_shape)
+
+    return [top_left_idx + di + rows * dj for dj in range(right) for di in range(bottom)]

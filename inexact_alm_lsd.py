@@ -7,15 +7,17 @@ import matplotlib.pyplot as plt
 from utils import *
 import time
 
+from joblib import Parallel, delayed
 
-def getGraphSPAMS_all_groups(img_shape, group_size):
+
+def getGraphSPAMS_all_groups(img_shape, group_shape):
     if len(img_shape) != 2:
         raise "Input lengths are incorrect"
 
     m = img_shape[0]
     n = img_shape[1]
-    a = min(group_size, m)
-    b = min(group_size, n)
+    a = min(group_shape[0], m)
+    b = min(group_shape[1], n)
 
     numX = m - a + 1  # number of groups on x axis
     numY = n - b + 1  # number of groups on y axis
@@ -23,23 +25,27 @@ def getGraphSPAMS_all_groups(img_shape, group_size):
 
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
+    groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
+
+    indptr = [0] * (numGroup+1)  # number of elements in each col
+    indices = []
 
     # define groups
     groupIdx = 0
     for j in range(numY):
         for i in range(numX):
-            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
-            indMatrix[i:(i + a), j:(j + b)] = True
-            # groupIdx = j * (numX - 1) + i
-            varsIdx = np.where(indMatrix.flatten(order='F'))
-            groups_var[varsIdx, groupIdx] = True
+            varsIdx = get_vars_idx_top_left(i, j, (a, b), img_shape)
+            indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
+            indices.extend(varsIdx)
             groupIdx += 1
 
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+    data = np.full(len(indices), True)
+    groups_var = ssp.csc_matrix((data, indices, indptr), shape=(m * n, numGroup), dtype=bool)
+
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
 
     return graph
+
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
 def prox(G_S, lambda1, graph, num_threads=1):
@@ -53,18 +59,14 @@ def prox(G_S, lambda1, graph, num_threads=1):
                                intercept=intercept, regul=regul)
 
 
-def prox_by_frame(G_S, lambda1, graphs, num_threads=1):
-    regul = 'graph'
-    verbose = False  # verbosity, false by default
-    pos = False  # can be used with all the other regularizations
-    intercept = False  # can be used with all the other regularizations
-
-    result = np.zeros_like(G_S)
-    for frame_idx in range(G_S.shape[1]):
-        result[:, [frame_idx]] = spams.proximalGraph(G_S[:, [frame_idx]], graphs[frame_idx], False,
-                                                     lambda1=lambda1, numThreads=num_threads,
-                                                     verbose=verbose, pos=pos,
-                                                     intercept=intercept, regul=regul)
+def prox_by_frame(G_S, lambda1, graphs):
+    if USE_PARALLEL:
+        frames_results = Parallel(n_jobs=get_usable_cores())(delayed(prox)(G_S[:,[frame_idx]], lambda1, graphs[frame_idx]) for frame_idx in range(G_S.shape[1]))
+        return np.column_stack(frames_results)
+    else:
+        result = np.zeros_like(G_S)
+        for frame_idx in range(G_S.shape[1]):
+            result[:, [frame_idx]] = prox(G_S[:,[frame_idx]], lambda1, graphs[frame_idx], num_threads=get_usable_cores())
 
     return result
 
@@ -153,10 +155,10 @@ def inexact_alm_lsd(D0, graphs=None, groups=None, delta=10):
 
         # Algorithm line 8
         if useFlat:
-            S = prox_flat(G_S,  lambda_param / mu, groups)
+            S = prox_flat(G_S,  lambda_param / mu, groups, num_threads=get_usable_cores())
         else:
             S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
-                else prox(G_S, lambda_param / mu, graphs)
+                else prox(G_S, lambda_param / mu, graphs, num_threads=get_usable_cores())
 
         # UPDATE Y, mu
         Z = D - L - S
@@ -219,7 +221,7 @@ def LSD(ImData0, frame_start=0, frame_end=47, downsample_ratio=4):
     frame_size = (w, h)
 
     # build graph for spams.proximalGraph
-    BLOCK_SIZE = 3
+    BLOCK_SIZE = (3, 3)
     graph = getGraphSPAMS_all_groups((w, h), BLOCK_SIZE)
 
     # reshape so that each fame is a column
