@@ -386,18 +386,27 @@ def find_bounding_area_in_frame(sparse_frame):
                               stats[i, cv2.CC_STAT_WIDTH]+stats[i, cv2.CC_STAT_LEFT],
                               stats[i, cv2.CC_STAT_HEIGHT]+stats[i, cv2.CC_STAT_TOP]))
 
-    min_left = cc_dimensions.sort(key = lambda x: x[0])[0]
-    min_top = cc_dimensions.sort(key = lambda x: x[1])[0]
-    max_right = cc_dimensions.sort(key = lambda x: x[2])[-1]
-    max_bottom = cc_dimensions.sort(key = lambda x: x[3])[-1]
+    cc_dimensions.sort(key=lambda x: x[0])
+    min_left = cc_dimensions[0][0]
+    cc_dimensions.sort(key=lambda x: x[1])
+    min_top = cc_dimensions[0][1]
+    cc_dimensions.sort(key=lambda x: x[2])
+    max_right = cc_dimensions[-1][2]
+    cc_dimensions.sort(key=lambda x: x[3])
+    max_bottom = cc_dimensions[-1][3]
+
     return min_left, min_top, max_right, max_bottom
 
 
 def find_bounding_volume(sparse_mat):
     bounding_boxes = [find_bounding_area_in_frame(sparse_mat[:, :, i]) for i in sparse_mat.shape[2]]
-    min_left = bounding_boxes.sort(key = lambda x: x[0])[0]
-    min_top = bounding_boxes.sort(key = lambda x: x[1])[0]
-    max_right = bounding_boxes.sort(key = lambda x: x[2])[-1]
-    max_bottom = bounding_boxes.sort(key = lambda x: x[3])[-1]
-    return (min_left, min_top, max_right, max_bottom)
-    
+    bounding_boxes.sort(key=lambda x: x[0])
+    min_left = bounding_boxes[0][0]
+    bounding_boxes.sort(key=lambda x: x[1])
+    min_top = bounding_boxes[0][1]
+    bounding_boxes.sort(key=lambda x: x[2])
+    max_right = bounding_boxes[-1][2]
+    bounding_boxes.sort(key=lambda x: x[3])
+    max_bottom = bounding_boxes[-1][3]
+    return min_left, min_top, max_right, max_bottom
+
