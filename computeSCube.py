@@ -5,6 +5,7 @@ import numpy as np
 from scipy.ndimage.filters import convolve
 from utils import *
 
+
 def gkern(l=10, sig=1.):
     """
     creates a 3d gaussian kernel with side length l and a sigma of sig
@@ -73,17 +74,22 @@ def output_video(video_array, path):
         cv2.imwrite(path+f"/output_sparse_frame_{i}.bmp", cv2.cvtColor(video_out_array[i, :, :], cv2.COLOR_GRAY2RGB))
 
 
-def computeSCube(path_xt, path_yt):
+def computeSCube_frompaths(path_xt, path_yt):
     print('Load sparse xt, yt matrices')
     sparse_xt = load_mat_from_bin(path_xt, np.float64, (320, 240, 200))
     sparse_yt = load_mat_from_bin(path_yt, np.float64, (240, 320, 200))
-    print('build sparse xt, yt cubces')
+    return computeSCube(sparse_xt, sparse_yt)
+
+
+def computeSCube(sparse_xt, sparse_yt):
+    print('build sparse xt, yt cubes')
     sparse_xt_cube = build_sparse_xt_cube(sparse_xt)
     sparse_yt_cube = build_sparse_yt_cube(sparse_yt)
     print('integrate into a single cube')
     sparse_cube = build_final_cube(sparse_xt_cube, sparse_yt_cube)
     print('smooth cube')
-    smooth_sparse_cube = convolve(sparse_cube[:, :, :], gkern(), mode='reflect')
+    kern_size = int(min(sparse_cube.shape[1], sparse_cube.shape[2])/10)
+    smooth_sparse_cube = convolve(sparse_cube[:, :, :], gkern(kern_size), mode='reflect')
     print(np.sum(smooth_sparse_cube)) # should be close to 1
     return smooth_sparse_cube
     #print('apply adaptive threshold')
