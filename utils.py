@@ -214,3 +214,7 @@ def normalizeImage(image):
     """ Normalize image so that (min, max) -> (0, 1) """
     image -= np.min(image)
     image *= 1.0 / np.max(image)
+
+
+def clamp(n, minn, maxn):
+    return max(min(maxn, n), minn)
