@@ -22,13 +22,13 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
     this function takes a binary mask, a size threshold, a frame_idx
     and a sparse cube and computes groups and weights for the specified frame
     """
-
     groups = []
     connectivity = 4  # You need to choose 4 or 8 for connectivity type
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_image[:, :, frame_idx],
                                                                             connectivity, cv2.CV_32S)
     areas = {}
     for i in range(0, num_labels):
+
         # i ==0 is the background cc by convention. ignore
         if i == 0:
             continue
@@ -41,6 +41,8 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
         (cX, cY) = centroids[i]
         area = stats[i, cv2.CC_STAT_AREA]
         areas[i] = area
+
+    areas, labels = unite_nestedCCs(num_labels, labels, stats)
 
     for label, area in areas.items():
         mask_2d = labels == label
@@ -83,7 +85,6 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=
     # compute foreground mask from lsd step.
     # compute size threshold for filtering.
     #########################################
-
     lsd_mask, size_thresh = compute_lsd_mask(data, lowrank_mat, sparse_mat)
 
     ###############################
