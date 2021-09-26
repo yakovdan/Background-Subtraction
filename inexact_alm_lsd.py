@@ -1,22 +1,24 @@
 import argparse
-import numpy as np
-from numpy import linalg as LA
-import spams
-import scipy.sparse as ssp
-import scipy.io
 import matplotlib.pyplot as plt
-from utils import *
+import numpy as np
+import spams
+import scipy.io
+import scipy.sparse as ssp
 import time
 
+from joblib import Parallel, delayed
+from numpy import linalg as LA
+from utils import *
 
-def getGraphSPAMS_all_groups(img_shape, batch_shape):
-    if len(img_shape) != 2 or len(batch_shape) != 2:
+
+def getGraphSPAMS_all_groups(img_shape, group_shape):
+    if len(img_shape) != 2:
         raise "Input lengths are incorrect"
 
     m = img_shape[0]
     n = img_shape[1]
-    a = min(batch_shape[0], m)
-    b = min(batch_shape[1], n)
+    a = min(group_shape[0], m)
+    b = min(group_shape[1], n)
 
     numX = m - a + 1  # number of groups on x axis
     numY = n - b + 1  # number of groups on y axis
@@ -25,70 +27,24 @@ def getGraphSPAMS_all_groups(img_shape, batch_shape):
     # init graph parameters
     eta_g = np.ones(numGroup, dtype=np.float64)
     groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
-    groups_var = ssp.lil_matrix((m * n, numGroup), dtype=bool)
+
+    indptr = [0] * (numGroup+1)  # number of elements in each col
+    indices = []
 
     # define groups
+    groupIdx = 0
     for j in range(numY):
         for i in range(numX):
-            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
-            indMatrix[i:(i + a), j:(j + b)] = True
-            groupIdx = j * (numX - 1) + i
-            varsIdx = np.where(indMatrix.flatten(order='F'))
-            groups_var[varsIdx, groupIdx] = True
-
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
-
-    return graph
-
-def getGraphSPAMS_group_centers(img_shape, group_shape, group_centers=None):
-    """
-    img_shape = (width, height) of image
-    group_shape = (width, height) of groups - odd when using group_centers
-    group_centers = 2D binary matrix of centers locations, or None to use all groups
-    """
-
-    if len(img_shape) != 2 or len(group_shape) != 2:
-        raise "Input lengths are incorrect"
-
-    m = img_shape[0]
-    n = img_shape[1]
-    a = min(group_shape[0], m)
-    b = min(group_shape[1], n)
-
-    if group_centers is None:
-        if a % 2 == 0 or b % 2 == 0:
-            raise "a and b must be odd when using group_centers"
-
-        numX = m - a + 1  # number of groups on x axis
-        numY = n - b + 1  # number of groups on y axis
-        numGroup = numX * numY  # total number of groups
-    else:
-        numGroup = np.sum(group_centers.flat)
-
-    # init graph parameters
-    eta_g = np.ones(numGroup, dtype=np.float64)
-    groups = ssp.csc_matrix(np.zeros((numGroup, numGroup)), dtype=bool)
-    groups_var = ssp.lil_matrix(np.zeros((m * n, numGroup), dtype=bool), dtype=bool)
-
-    a_ss = a // 2  # single side
-    b_ss = b // 2  # single side
-
-    # define groups
-    # (i,j) is the center pixel of each group
-    groupIdx = 0
-    for j in range(b_ss, n - b_ss):
-        for i in range(a_ss, m - a_ss):
-            indMatrix = np.zeros((m, n), dtype=bool)  # mask the size of the image
-            top_left_i, top_left_j = i - a_ss, j - b_ss
-            indMatrix[top_left_i:(top_left_i + a), top_left_j:(top_left_j + b)] = True
-            varsIdx = np.where(indMatrix.flatten(order='F'))
-            groups_var[varsIdx, groupIdx] = True
+            varsIdx = get_vars_idx_top_left(i, j, (a, b), img_shape)
+            indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
+            indices.extend(varsIdx)
             groupIdx += 1
 
-    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var.tocsc()}
+    data = np.full(len(indices), True)
+    groups_var = ssp.csc_matrix((data, indices, indptr), shape=(m * n, numGroup), dtype=bool)
 
+    graph = {'eta_g': eta_g, 'groups': groups, 'groups_var': groups_var}
     return graph
-
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
 def prox(G_S, lambda1, graph, num_threads=3):
@@ -102,23 +58,30 @@ def prox(G_S, lambda1, graph, num_threads=3):
                                intercept=intercept, regul=regul)
 
 
-def prox_by_frame(G_S, lambda1, graphs, num_threads=3):
-    regul = 'graph'
-    verbose = False  # verbosity, false by default
-    pos = False  # can be used with all the other regularizations
-    intercept = False  # can be used with all the other regularizations
-
-    result = np.zeros_like(G_S)
-    for frame_idx in range(G_S.shape[1]):
-        result[:, [frame_idx]] = spams.proximalGraph(G_S[:, [frame_idx]], graphs[frame_idx], False,
-                                                     lambda1=lambda1, numThreads=num_threads,
-                                                     verbose=verbose, pos=pos,
-                                                     intercept=intercept, regul=regul)
+def prox_by_frame(G_S, lambda1, graphs):
+    if USE_PARALLEL:
+        frames_results = Parallel(n_jobs=get_usable_cores())(delayed(prox)(G_S[:,[frame_idx]], lambda1, graphs[frame_idx]) for frame_idx in range(G_S.shape[1]))
+        return np.column_stack(frames_results)
+    else:
+        result = np.zeros_like(G_S)
+        for frame_idx in range(G_S.shape[1]):
+            result[:, [frame_idx]] = prox(G_S[:,[frame_idx]], lambda1, graphs[frame_idx], num_threads=get_usable_cores())
 
     return result
 
+# http://thoth.inrialpes.fr/people/mairal/spams/doc-python/html/doc_spams006.html#sec25
+def prox_flat(G_S, lambda1, groups, num_threads=1):
+    regul = 'group-lasso-linf'
+    verbose = False  # verbosity, false by default
+    pos = False  # can be used with all the other regularizations
+    intercept = False  # can be used with all the other regularizations
+    return spams.proximalFlat(G_S, False, groups=groups, lambda1=lambda1,
+                               numThreads=num_threads,
+                               verbose=verbose, pos=pos,
+                               intercept=intercept, regul=regul)
 
-def inexact_alm_lsd(D0, graphs):
+
+def inexact_alm_lsd(D0, graphs=None, groups=None, delta=10):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -126,12 +89,21 @@ def inexact_alm_lsd(D0, graphs):
     else:
         D = D0
 
-    use_prox_by_frame = isinstance(graphs, np.ndarray)
+    # choose between graph and flat
+    if graphs is None and groups is None:
+        raise "one of graphs or groups must not be None"
+    elif graphs is not None and groups is not None:
+        raise "only one of graphs or groups must not be None"
+    else:
+        if graphs is not None:
+            useFlat = False
+            use_prox_by_frame = type(graphs) is list or isinstance(graphs, np.ndarray)
+        else:
+            useFlat = True
 
     m, n = D.shape
     d = np.min(D.shape)
 
-    delta = 10
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
 
     # initialize
@@ -180,8 +152,11 @@ def inexact_alm_lsd(D0, graphs):
         G_S = D - L + Y / mu  # Algorithm line 7
 
         # Algorithm line 8
-        S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
-            else prox(G_S, lambda_param / mu, graphs)
+        if useFlat:
+            S = prox_flat(G_S,  lambda_param / mu, groups, num_threads=get_usable_cores())
+        else:
+            S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
+                else prox(G_S, lambda_param / mu, graphs, num_threads=get_usable_cores())
 
         # UPDATE Y, mu
         Z = D - L - S
@@ -209,6 +184,7 @@ def subplots_samples(sources, idx, size_factor=1):
     figsize = (size_factor * len(idx), size_factor * len(sources))
     fig, axes = plt.subplots(len(sources), len(idx), figsize=figsize, gridspec_kw={'wspace': 0.05, 'hspace': 0.05})
 
+    print('Plotting...')
     for ix, iy in np.ndindex(axes.shape):
         ax = axes[ix, iy]
         ax.imshow(sources[ix][:, :, idx[iy]], cmap='gray', vmin=0.0, vmax=1.0)
@@ -226,8 +202,11 @@ def subplots_samples(sources, idx, size_factor=1):
 
 def LSD(ImData0, frame_start, frame_end, downsample_ratio):
 
-    ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
-    # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
+    if downsample_ratio == 1:
+        ImData1 = ImData0
+    else:
+        ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
+        # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
 
     normalizeImage(ImData1)
 
@@ -242,14 +221,12 @@ def LSD(ImData0, frame_start, frame_end, downsample_ratio):
     # build graph for spams.proximalGraph
     BLOCK_SIZE = (3, 3)
     graph = getGraphSPAMS_all_groups((w, h), BLOCK_SIZE)
-    graphs = np.full(frames, graph)  # duplicate to test prox_by_frame
 
     # reshape so that each fame is a column
     D = ImData2.reshape((np.prod(frame_size), frames), order='F')
 
-    L, S, iterations, converged = inexact_alm_lsd(D, graphs)
-    print(f'iterations: {iterations}')
-
+    L, S, iterations, converged = inexact_alm_lsd(D, graphs=graph)
+    
     # mask S and reshape back to 3d array
     S_mask = foreground_mask(D, L, S)
     S = S.reshape(original_downsampled_shape, order='F')
@@ -267,6 +244,7 @@ def main(args):
 
     # import video
     # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
+
     ImData0, _ = import_video_as_frames(args.input, args.frame_start, args.frame_end)
     original_shape = ImData0.shape
 
