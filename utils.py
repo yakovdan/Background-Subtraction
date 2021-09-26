@@ -91,16 +91,16 @@ def save_images(image_array, path, grayscale):
             cv2.imwrite(filenames[i], image_array[i, :, :, :])
 
 
-def plot_errors(errors_list, filename, display=False, log_scale=True):
+def plot_errors(errors_list, filename, title, x_label, y_label, display=False, log_scale=True):
     iterations = np.arange(1, len(errors_list) + 1)
     if log_scale:
         data = np.log(np.array(errors_list))
     else:
         data = np.array(errors_list)
     plt.plot(iterations, data)
-    plt.xlabel('iterations')
-    plt.ylabel('errors')
-    plt.title('Decomposition error over iterations')
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
     plt.savefig(filename)
     if display:
         plt.show()
