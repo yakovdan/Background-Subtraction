@@ -28,13 +28,13 @@ def get_proximal_flat_groups_nonoverlap(img_shape, batch_shape):
     b = min(batch_shape[1], n)
 
     # init graph parameters
-    groups = np.zeros((m, n), dtype=np.int32, order='F') + 1
+    groups = np.zeros((m, n), dtype=np.int32, order='F')
 
     # define groups
     # idx=0 means no group on that pixel
-    groupIdx = 2
-    for j in range(0, n - b + 1, b):
-        for i in range(0, m - a + 1, a):
+    groupIdx = 1
+    for j in range(0, n, b):
+        for i in range(0, m, a):
             groups[i:(i + a), j:(j + b)] = groupIdx
             groupIdx += 1
 
@@ -63,8 +63,8 @@ def get_proximal_graph_nonoverlap(img_shape, batch_shape):
 
     # define groups
     groupIdx = 0
-    for j in range(0, n - b + 1, b):
-        for i in range(0, m - a + 1, a):
+    for j in range(0, n, b):
+        for i in range(0, m, a):
             varsIdx = get_vars_idx_top_left(i, j, (a,b), img_shape)
             indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
             indices.extend(varsIdx)
