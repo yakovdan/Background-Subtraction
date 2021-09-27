@@ -500,7 +500,7 @@ def main(args):
         S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD(ImData0,
                                                                         frame_start=args.frame_start,
                                                                         frame_end=args.frame_end,
-                                                                        downsample_ratio=args.downsample_ratio)
+                                                                        downsample_ratio=args.downscale)
 
         t1 = time.time()
     else:
