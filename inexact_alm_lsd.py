@@ -8,6 +8,8 @@ import time
 
 from joblib import Parallel, delayed
 from numpy import linalg as LA
+
+import utils
 from utils import *
 
 BLOCK_SIZE = (3, 3)
@@ -48,7 +50,7 @@ def getGraphSPAMS_all_groups(img_shape, group_shape):
     return graph
 
 # http://spams-devel.gforge.inria.fr/doc-python/html/doc_spams006.html#sec27
-def prox(G_S, lambda1, graph, num_threads=3):
+def prox(G_S, lambda1, graph, num_threads=utils.get_usable_cores()):
     regul = 'graph'
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
@@ -70,7 +72,7 @@ def prox_by_frame(G_S, lambda1, graphs):
     return result
 
 # http://thoth.inrialpes.fr/people/mairal/spams/doc-python/html/doc_spams006.html#sec25
-def prox_flat(G_S, lambda1, groups, num_threads=1):
+def prox_flat(G_S, lambda1, groups, num_threads=utils.get_usable_cores()):
     regul = 'group-lasso-linf'
     verbose = False  # verbosity, false by default
     pos = False  # can be used with all the other regularizations
