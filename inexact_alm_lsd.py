@@ -173,7 +173,7 @@ def inexact_alm_lsd(D0, graphs=None, groups=None, delta=10):
             print('CONVERGED')
             converged = True
         elif iter_out >= max_iter:
-            print('CONVERGED')
+            print('NOT CONVERGED')
             break
 
     return L, S, iter_out, converged
@@ -232,7 +232,7 @@ def LSD(ImData0, frame_start, frame_end, downsample_ratio):
     S_mask = S_mask.reshape(original_downsampled_shape, order='F')
     L_reshaped = L.reshape(original_downsampled_shape, order='F')
 
-    return S, S_mask, L_reshaped, ImData1, ImMean, original_downsampled_shape
+    return S, S_mask, L_reshaped, ImData1, ImMean, original_downsampled_shape, iterations, converged
 
 
 def main(args):

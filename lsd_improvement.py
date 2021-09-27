@@ -58,14 +58,14 @@ def get_proximal_graph_nonoverlap(img_shape, batch_shape):
     eta_g = np.ones(numGroup, dtype=np.float64)
     groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
 
-    indptr = [0] * (numGroup+1)  # number of elements in each col
+    indptr = [0] * (numGroup + 1)  # number of elements in each col
     indices = []
 
     # define groups
     groupIdx = 0
     for j in range(0, n, b):
         for i in range(0, m, a):
-            varsIdx = get_vars_idx_top_left(i, j, (a,b), img_shape)
+            varsIdx = get_vars_idx_top_left(i, j, (a, b), img_shape)
             indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
             indices.extend(varsIdx)
             groupIdx += 1
@@ -97,7 +97,7 @@ def get_proximal_graph_group_centers(img_shape, group_size, group_centers):
     eta_g = np.zeros(numGroup, dtype=np.float64)
     groups = ssp.csc_matrix((numGroup, numGroup), dtype=bool)
 
-    indptr = [0] * (numGroup+1) # number of elements in each col
+    indptr = [0] * (numGroup + 1)  # number of elements in each col
     indices = []
 
     centers_cols, centers_rows = np.where(group_centers.T > 0)  # transpose to run over cols
@@ -116,7 +116,7 @@ def get_proximal_graph_group_centers(img_shape, group_size, group_centers):
 
         # set group mask
         varsIdx = get_vars_idx_center(i, j, group_radius, img_shape)
-        indptr[groupIdx+1] = indptr[groupIdx] + len(varsIdx)
+        indptr[groupIdx + 1] = indptr[groupIdx] + len(varsIdx)
         indices.extend(varsIdx)
 
     data = np.full(len(indices), True)
@@ -197,7 +197,7 @@ def inexact_alm_rpca(D0, delta=1, use_sv_prediction=False):
             print('CONVERGED')
             converged = True
         elif iter_out >= max_iter:
-            print('CONVERGED')
+            print('NOT CONVERGED')
             break
 
     return L, S, iter_out, converged
@@ -298,7 +298,7 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
             print('CONVERGED')
             converged = True
         elif iter_out >= max_iter:
-            print('CONVERGED')
+            print('NOT CONVERGED')
             break
 
     return L, S, iter_out, converged
@@ -370,15 +370,14 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     print(f'delta = {delta:f}')
 
     if proximal_object is None:
-        L, S = inexact_alm_rpca(D, delta=delta)[:2]  # RPCA
+        L, S, iter_count, convergence = inexact_alm_rpca(D, delta=delta)[:2]  # RPCA
     elif mode == "NONOVERLAPPING_GRAPHS":
-        L, S = inexact_alm_lsd_graph(D, proximal_object, delta)[:2]  # graphs
+        L, S, iter_count, convergence = inexact_alm_lsd_graph(D, proximal_object, delta)[:2]  # graphs
     elif mode == "NONOVERLAPPING_GROUPS":
-        L, S = inexact_alm_lsd_flat(D, proximal_object, delta)[:2]  # groups
+        L, S, iter_count, convergence = inexact_alm_lsd_flat(D, proximal_object, delta)[:2]  # groups
     else:
         print("unknown mode")
         raise Exception("Unknown improved LSD mode")
-
 
     # mask S and reshape back to 3d array
     S_mask = foreground_mask(D, L, S, sigmas_from_mean=2) \
@@ -405,23 +404,23 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     group_radius = 1
     if USE_PARALLEL:
         graphs = Parallel(n_jobs=get_usable_cores())(delayed(get_proximal_graph_group_centers) \
-                                        (weight_mask[:, :, i].shape, group_radius, weight_mask[:, :, i]) for i in
-                                    range(weight_mask.shape[-1]))
+                                                         (weight_mask[:, :, i].shape, group_radius,
+                                                          weight_mask[:, :, i]) for i in
+                                                     range(weight_mask.shape[-1]))
     else:
         graphs = [get_proximal_graph_group_centers(weight_mask[:, :, i].shape,
                                                    group_radius,
                                                    group_centers=weight_mask[:, :, i])
                   for i in range(weight_mask.shape[-1])]
     t1 = time.time()
-    print(f'Graphs time: {t1-t0:.2f}s')
+    print(f'Graphs time: {t1 - t0:.2f}s')
 
     background_masks = [(weight_mask[:, :, i] < 0).flatten(order='F') for i in range(weight_mask.shape[-1])]
 
-    return graphs, background_masks
+    return graphs, background_masks, iter_count, convergence
 
 
 def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta=1, alg_ver=2):
-
     if downsample_ratio == 1:
         ImData1 = ImData0
     else:
@@ -453,9 +452,11 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
         print("Should not have gotten here. Something went wrong")
         raise Exception("LSD_improved wrong alg ver")
 
-    graphs, background_masks = build_improved_LSD_graphs(D, original_downsampled_shape, weights, delta=1.0,
-                                                         proximal_object=proximal_object,
-                                                         mode=mode)
+    graphs, background_masks, graph_iter, graph_converged = build_improved_LSD_graphs(D,
+                                                                                      original_downsampled_shape,
+                                                                                      weights, delta=1.0,
+                                                                                      proximal_object=proximal_object,
+                                                                                      mode=mode)
 
     print('Running LSD...')
     L, S, iterations, converged = inexact_alm_lsd_with_background(D, graphs, background_masks)
@@ -464,7 +465,8 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
     S_mask = foreground_mask(D, L, S).reshape(original_downsampled_shape, order='F')
     L_recon = L.reshape(original_downsampled_shape, order='F')
 
-    return S, S_mask, L_recon, ImData1, ImMean, original_downsampled_shape
+    return S, S_mask, L_recon, ImData1, ImMean, original_downsampled_shape, \
+           iterations, converged, graph_iter, graph_converged
 
 
 def main(args):
@@ -474,48 +476,55 @@ def main(args):
     np.set_printoptions(precision=2)
 
     ImData0, _ = import_video_as_frames(args.input, args.frame_start, args.frame_end)
+    graph_iter = None
+    graph_converged = None
 
     if args.alg_ver == 1:
         print('IMPROVED LSD: RPCA')
-        print_to_logfile(args.output+'computelog.txt', f'IMPROVED algorithm: RPCA')
+        print_to_logfile(args.output + 'computelog.txt', f'IMPROVED algorithm: RPCA')
         t0 = time.time()
-        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD_improved(ImData0, frame_start=args.frame_start,
-                                                                                 frame_end=args.frame_end,
-                                                                                 downsample_ratio=args.downscale,
-                                                                                 alg_ver=args.alg_ver)
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape, iterations, converged, graph_iter, graph_converged \
+            = LSD_improved(ImData0, frame_start=args.frame_start,
+                           frame_end=args.frame_end,
+                           downsample_ratio=args.downscale,
+                           alg_ver=args.alg_ver)
         t1 = time.time()
     elif args.alg_ver == 2:
         print('IMPROVED LSD: GROUP SPARSE')
-        print_to_logfile(args.output+'computelog.txt', f'IMPROVED algorithm: GROUP SPARSE')
+        print_to_logfile(args.output + 'computelog.txt', f'IMPROVED algorithm: GROUP SPARSE')
         t0 = time.time()
-        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD_improved(ImData0, frame_start=args.frame_start,
-                                                                                 frame_end=args.frame_end,
-                                                                                 downsample_ratio=args.downscale,
-                                                                                 alg_ver=args.alg_ver)
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape, iterations, converged, graph_iter, graph_converged \
+            = LSD_improved(ImData0, frame_start=args.frame_start,
+                           frame_end=args.frame_end,
+                           downsample_ratio=args.downscale,
+                           alg_ver=args.alg_ver)
         t1 = time.time()
     elif args.alg_ver == 0:
         print('ORIGINAL')
-        print_to_logfile(args.output+'computelog.txt', f'ORIGINAL algorithm')
+        print_to_logfile(args.output + 'computelog.txt', f'ORIGINAL algorithm')
         t0 = time.time()
-        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD(ImData0,
-                                                                        frame_start=args.frame_start,
-                                                                        frame_end=args.frame_end,
-                                                                        downsample_ratio=args.downscale)
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape, iterations, converged = LSD(ImData0,
+                                                                                               frame_start=args.frame_start,
+                                                                                               frame_end=args.frame_end,
+                                                                                               downsample_ratio=args.downscale)
 
         t1 = time.time()
     else:
         print('invalid algo version selected')
-        print_to_logfile(args.output+'computelog.txt', f'wrong algo version selected')
+        print_to_logfile(args.output + 'computelog.txt', f'wrong algo version selected')
         raise Exception("wrong algo version")
-    print(f'Run times: original: {t1 - t0:.2f}s')
-    print_to_logfile(args.output+'computelog.txt', f'Run times: {t1 - t0:.2f}s')
+    print(f'Run times: {t1 - t0:.2f}s')
+    print_to_logfile(args.output + 'computelog.txt', f'Run times: {t1 - t0:.2f}s')
 
-    np.save(args.output+"sparse", S)
-    np.save(args.output+"sparse.bin", S_mask)
-    np.save(args.output+"lowrank", L)
-    np.save(args.output+"data", ImData1)
-    with open(args.output+'numerical_values.txt', 'w') as num_vals:
+    np.save(args.output + "sparse", S)
+    np.save(args.output + "sparse.bin", S_mask)
+    np.save(args.output + "lowrank", L)
+    np.save(args.output + "data", ImData1)
+    with open(args.output + 'numerical_values.txt', 'w') as num_vals:
         num_vals.write(f"ImMean: {ImMean}, original downsampled shape: {original_downsampled_shape}\n")
+        num_vals.write(f"iterations: {iterations}, converged: {converged}\n")
+        if graph_iter is not None:
+            num_vals.write(f"graph iterations: {graph_iter},graph convergence: {graph_converged}\n")
 
 
 if __name__ == '__main__':
@@ -526,8 +535,8 @@ if __name__ == '__main__':
     parser.add_argument('--frame_end', type=int, default=2000, help='end frame index, inclusive')
     parser.add_argument('--downscale', type=int, default=1, help='downscale factor')
     parser.add_argument('--plot', type=bool, default=False, help='plot or not')
-    parser.add_argument('--alg_ver', type=int, default = 0, help='algo version. 0, 1, 2')
-    parser.add_argument('--parallel', type=bool, default = False, help='run in parallel mode')
+    parser.add_argument('--alg_ver', type=int, default=0, help='algo version. 0, 1, 2')
+    parser.add_argument('--parallel', type=bool, default=False, help='run in parallel mode')
     args = parser.parse_args()
     utils.USE_PARALLEL = args.parallel
     print('START')
@@ -535,11 +544,10 @@ if __name__ == '__main__':
     enabled_str = '*ENABLED* :)' if USE_PARALLEL else 'DISABLED :('
     print(f'CORES: {num_cores}. Parallel processing {enabled_str}\n')
     args.num_cores = num_cores
-    args.use_parallel = USE_PARALLEL
-    write_log_to_file(args.output+'computelog.txt', args)
+    write_log_to_file(args.output + 'computelog.txt', args)
     start = time.time()
     main(args)
     end = time.time()
     print('DONE')
     print(f'ELAPSED TIME: {(end - start):.3f} seconds')
-    print_to_logfile(args.output+'computelog.txt', f'ELAPSED TIME: {(end - start):.3f} seconds')
+    print_to_logfile(args.output + 'computelog.txt', f'ELAPSED TIME: {(end - start):.3f} seconds')
