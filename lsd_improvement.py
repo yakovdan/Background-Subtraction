@@ -127,7 +127,7 @@ def get_proximal_graph_group_centers(img_shape, group_size, group_centers):
     return graph
 
 
-def inexact_alm_rpca(D0, delta=1, use_sv_prediction=False):
+def inexact_alm_rpca(D0, delta=1.0, use_sv_prediction=False):
     # make sure D is in fortran order
     if not np.isfortran(D0):
         print('D_in is not in Fortran order')
@@ -234,7 +234,7 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
     d = np.min(D.shape)
 
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
-    background_lambda = 5e2 * lambda_param
+    background_lambda = 1e2 * lambda_param
 
     # initialize
     norm_two = LA.norm(D, ord=2)
@@ -370,11 +370,11 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     print(f'delta = {delta:f}')
 
     if proximal_object is None:
-        L, S, iter_count, convergence = inexact_alm_rpca(D, delta=delta)[:2]  # RPCA
+        L, S, iter_count, convergence = inexact_alm_rpca(D, delta=10.0)  # RPCA
     elif mode == "NONOVERLAPPING_GRAPHS":
-        L, S, iter_count, convergence = inexact_alm_lsd_graph(D, proximal_object, delta)[:2]  # graphs
+        L, S, iter_count, convergence = inexact_alm_lsd_graph(D, proximal_object, delta)  # graphs
     elif mode == "NONOVERLAPPING_GROUPS":
-        L, S, iter_count, convergence = inexact_alm_lsd_flat(D, proximal_object, delta)[:2]  # groups
+        L, S, iter_count, convergence = inexact_alm_lsd_flat(D, proximal_object, delta)  # groups
     else:
         print("unknown mode")
         raise Exception("Unknown improved LSD mode")

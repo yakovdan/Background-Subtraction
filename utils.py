@@ -13,7 +13,7 @@ from datetime import datetime
 import networkx as nx
 
 num_cores = multiprocessing.cpu_count()
-USE_PARALLEL = True
+USE_PARALLEL = False
 
 
 def get_usable_cores():
