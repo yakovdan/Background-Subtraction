@@ -10,10 +10,11 @@ from joblib import Parallel, delayed
 from numpy import linalg as LA
 from utils import *
 
+BLOCK_SIZE = (3, 3)
 
 def getGraphSPAMS_all_groups(img_shape, group_shape):
     if len(img_shape) != 2:
-        raise "Input lengths are incorrect"
+        raise Exception("Input lengths are incorrect")
 
     m = img_shape[0]
     n = img_shape[1]
@@ -60,13 +61,12 @@ def prox(G_S, lambda1, graph, num_threads=3):
 
 def prox_by_frame(G_S, lambda1, graphs):
     if USE_PARALLEL:
-        frames_results = Parallel(n_jobs=get_usable_cores())(delayed(prox)(G_S[:,[frame_idx]], lambda1, graphs[frame_idx]) for frame_idx in range(G_S.shape[1]))
+        frames_results = Parallel(n_jobs=get_usable_cores())(delayed(prox)(G_S[:, [frame_idx]], lambda1, graphs[frame_idx]) for frame_idx in range(G_S.shape[1]))
         return np.column_stack(frames_results)
     else:
         result = np.zeros_like(G_S)
         for frame_idx in range(G_S.shape[1]):
-            result[:, [frame_idx]] = prox(G_S[:,[frame_idx]], lambda1, graphs[frame_idx], num_threads=get_usable_cores())
-
+            result[:, [frame_idx]] = prox(G_S[:, [frame_idx]], lambda1, graphs[frame_idx], num_threads=get_usable_cores())
     return result
 
 # http://thoth.inrialpes.fr/people/mairal/spams/doc-python/html/doc_spams006.html#sec25
@@ -91,9 +91,9 @@ def inexact_alm_lsd(D0, graphs=None, groups=None, delta=10):
 
     # choose between graph and flat
     if graphs is None and groups is None:
-        raise "one of graphs or groups must not be None"
+        raise Exception("one of graphs or groups must not be None")
     elif graphs is not None and groups is not None:
-        raise "only one of graphs or groups must not be None"
+        raise Exception("only one of graphs or groups must not be None")
     else:
         if graphs is not None:
             useFlat = False
@@ -219,7 +219,6 @@ def LSD(ImData0, frame_start, frame_end, downsample_ratio):
     frame_size = (w, h)
 
     # build graph for spams.proximalGraph
-    BLOCK_SIZE = (3, 3)
     graph = getGraphSPAMS_all_groups((w, h), BLOCK_SIZE)
 
     # reshape so that each fame is a column

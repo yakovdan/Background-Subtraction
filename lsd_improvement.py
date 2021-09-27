@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 from numpy import linalg as LA
 import scipy.sparse as ssp
@@ -5,7 +7,8 @@ import scipy.io
 import matplotlib.pyplot as plt
 import math
 
-from inexact_alm_lsd import subplots_samples, inexact_alm_lsd, getGraphSPAMS_all_groups, LSD, prox_by_frame
+import utils
+from inexact_alm_lsd import subplots_samples, inexact_alm_lsd, getGraphSPAMS_all_groups, LSD, prox_by_frame, BLOCK_SIZE
 from utils import *
 import time
 
@@ -17,7 +20,7 @@ from joblib import Parallel, delayed
 
 def get_proximal_flat_groups_nonoverlap(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
-        raise "Input lengths are incorrect"
+        raise Exception("Input lengths are incorrect")
 
     m = img_shape[0]
     n = img_shape[1]
@@ -40,7 +43,7 @@ def get_proximal_flat_groups_nonoverlap(img_shape, batch_shape):
 
 def get_proximal_graph_nonoverlap(img_shape, batch_shape):
     if len(img_shape) != 2 or len(batch_shape) != 2:
-        raise "Input lengths are incorrect"
+        raise Exception("Input lengths are incorrect")
 
     m = img_shape[0]
     n = img_shape[1]
@@ -363,12 +366,19 @@ def inexact_alm_lsd_flat(D, groups, delta):
     return inexact_alm_lsd(D, groups=groups, delta=delta)
 
 
-def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0):
+def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_object=None, mode=None):
     print(f'delta = {delta:f}')
 
-    L, S = inexact_alm_rpca(D, delta=delta)[:2]  # rpca
-    # L[1], S[1] = inexact_alm_lsd_graph(D, graph_nonoverlap, delta)[:2]  # graphs
-    # L[1], S[1] = inexact_alm_lsd_flat(D, groups_nonoverlap, delta)[:2]  # groups
+    if proximal_object is None:
+        L, S = inexact_alm_rpca(D, delta=delta)[:2]  # RPCA
+    elif mode == "NONOVERLAPPING_GRAPHS":
+        L, S = inexact_alm_lsd_graph(D, proximal_object, delta)[:2]  # graphs
+    elif mode == "NONOVERLAPPING_GROUPS":
+        L, S = inexact_alm_lsd_flat(D, proximal_object, delta)[:2]  # groups
+    else:
+        print("unknown mode")
+        raise Exception("Unknown improved LSD mode")
+
 
     # mask S and reshape back to 3d array
     S_mask = foreground_mask(D, L, S, sigmas_from_mean=2) \
@@ -394,7 +404,7 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0):
     t0 = time.time()
     group_radius = 1
     if USE_PARALLEL:
-        graphs = Parallel(n_jobs=2)(delayed(get_proximal_graph_group_centers) \
+        graphs = Parallel(n_jobs=get_usable_cores())(delayed(get_proximal_graph_group_centers) \
                                         (weight_mask[:, :, i].shape, group_radius, weight_mask[:, :, i]) for i in
                                     range(weight_mask.shape[-1]))
     else:
@@ -410,12 +420,12 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0):
     return graphs, background_masks
 
 
-def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta=1):
+def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta=1, alg_ver=2):
+
     if downsample_ratio == 1:
         ImData1 = ImData0
     else:
         ImData1 = resize_with_cv2(ImData0[:, :, frame_start:(frame_end + 1)], 1 / downsample_ratio)
-        # ImData1 = ImData0[::downsample_ratio, ::downsample_ratio, frame_start:(frame_end + 1)]
 
     normalizeImage(ImData1)
 
@@ -432,60 +442,104 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
 
     # build graphs
     weights = (1, 1.5)
-    graphs, background_masks = build_improved_LSD_graphs(D, original_downsampled_shape, weights, delta=1.0)
+    mode = None
+
+    if alg_ver == 2:
+        proximal_object = get_proximal_flat_groups_nonoverlap(frame_size, BLOCK_SIZE)
+        mode = "NONOVERLAPPING_GROUPS"
+    elif alg_ver == 1:
+        proximal_object = None
+    else:
+        print("Should not have gotten here. Something went wrong")
+        raise Exception("LSD_improved wrong alg ver")
+
+    graphs, background_masks = build_improved_LSD_graphs(D, original_downsampled_shape, weights, delta=1.0,
+                                                         proximal_object=proximal_object,
+                                                         mode=mode)
 
     print('Running LSD...')
     L, S, iterations, converged = inexact_alm_lsd_with_background(D, graphs, background_masks)
 
     # mask S and reshape back to 3d array
     S_mask = foreground_mask(D, L, S).reshape(original_downsampled_shape, order='F')
-    L_recon = L.reshape(original_downsampled_shape, order='F') + ImMean
+    L_recon = L.reshape(original_downsampled_shape, order='F')
 
-    return S_mask, L_recon, ImData1
+    return S, S_mask, L_recon, ImData1, ImMean, original_downsampled_shape
 
 
-def main():
+def main(args):
     np.random.seed(0)
 
     # set print precision to 2 decimal points
     np.set_printoptions(precision=2)
 
-    # import video
-    # using dtype=np.float64 to allow normalizing. use np.uint8 if not needed.
-    ImData0 = np.asfortranarray(scipy.io.loadmat('data/WaterSurface.mat')['ImData'], dtype=np.float64)
+    ImData0, _ = import_video_as_frames(args.input, args.frame_start, args.frame_end)
 
-    downsample_ratio = 4
-    frame_start = 0
-    frame_end = 47
+    if args.alg_ver == 1:
+        print('IMPROVED LSD: RPCA')
+        print_to_logfile(args.output+'computelog.txt', f'IMPROVED algorithm: RPCA')
+        t0 = time.time()
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD_improved(ImData0, frame_start=args.frame_start,
+                                                                                 frame_end=args.frame_end,
+                                                                                 downsample_ratio=args.downscale,
+                                                                                 alg_ver=args.alg_ver)
+        t1 = time.time()
+    elif args.alg_ver == 2:
+        print('IMPROVED LSD: GROUP SPARSE')
+        print_to_logfile(args.output+'computelog.txt', f'IMPROVED algorithm: GROUP SPARSE')
+        t0 = time.time()
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD_improved(ImData0, frame_start=args.frame_start,
+                                                                                 frame_end=args.frame_end,
+                                                                                 downsample_ratio=args.downscale,
+                                                                                 alg_ver=args.alg_ver)
+        t1 = time.time()
+    elif args.alg_ver == 0:
+        print('ORIGINAL')
+        print_to_logfile(args.output+'computelog.txt', f'ORIGINAL algorithm')
+        t0 = time.time()
+        S, S_mask, L, ImData1, ImMean, original_downsampled_shape = LSD(ImData0,
+                                                                        frame_start=args.frame_start,
+                                                                        frame_end=args.frame_end,
+                                                                        downsample_ratio=args.downsample_ratio)
 
-    print('IMPROVED')
-    t0 = time.time()
-    S_mask_imp, L_recon_imp, ImData1_imp = LSD_improved(
-        ImData0, frame_start=frame_start, frame_end=frame_end, downsample_ratio=downsample_ratio)
-    t1 = time.time()
+        t1 = time.time()
+    else:
+        print('invalid algo version selected')
+        print_to_logfile(args.output+'computelog.txt', f'wrong algo version selected')
+        raise Exception("wrong algo version")
+    print(f'Run times: original: {t1 - t0:.2f}s')
+    print_to_logfile(args.output+'computelog.txt', f'Run times: {t1 - t0:.2f}s')
 
-    print('ORIGINAL')
-    t2 = time.time()
-    S_mask, L_recon, ImData1 = LSD(
-        ImData0, frame_start=frame_start, frame_end=frame_end, downsample_ratio=downsample_ratio)
-    t3 = time.time()
-
-    print(f'Run times: original: {t3 - t2:.2f}s, improved: {t1 - t0:.2f}s')
-
-    N = 6
-    video_length = ImData1.shape[2]
-    subplots_samples([ImData1, S_mask, S_mask_imp, L_recon, L_recon_imp], range(0, video_length, video_length // N),
-                     size_factor=4)
+    np.save(args.output+"sparse", S)
+    np.save(args.output+"sparse.bin", S_mask)
+    np.save(args.output+"lowrank", L)
+    np.save(args.output+"data", ImData1)
+    with open(args.output+'numerical_values.txt', 'w') as num_vals:
+        num_vals.write(f"ImMean: {ImMean}, original downsampled shape: {original_downsampled_shape}\n")
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='run LSD')
+    parser.add_argument('--input', type=str, default=".", help='path to input folder with jpg frames')
+    parser.add_argument('--output', type=str, default=".", help='path to output folder to store binary results')
+    parser.add_argument('--frame_start', type=int, default=0, help='start frame index')
+    parser.add_argument('--frame_end', type=int, default=2000, help='end frame index, inclusive')
+    parser.add_argument('--downscale', type=int, default=1, help='downscale factor')
+    parser.add_argument('--plot', type=bool, default=False, help='plot or not')
+    parser.add_argument('--alg_ver', type=int, default = 0, help='algo version. 0, 1, 2')
+    parser.add_argument('--parallel', type=bool, default = False, help='run in parallel mode')
+    args = parser.parse_args()
+    utils.USE_PARALLEL = args.parallel
     print('START')
 
     enabled_str = '*ENABLED* :)' if USE_PARALLEL else 'DISABLED :('
     print(f'CORES: {num_cores}. Parallel processing {enabled_str}\n')
-
+    args.num_cores = num_cores
+    args.use_parallel = USE_PARALLEL
+    write_log_to_file(args.output+'computelog.txt', args)
     start = time.time()
-    main()
+    main(args)
     end = time.time()
     print('DONE')
     print(f'ELAPSED TIME: {(end - start):.3f} seconds')
+    print_to_logfile(args.output+'computelog.txt', f'ELAPSED TIME: {(end - start):.3f} seconds')

@@ -13,7 +13,8 @@ from datetime import datetime
 import networkx as nx
 
 num_cores = multiprocessing.cpu_count()
-USE_PARALLEL = False
+USE_PARALLEL = True
+
 
 def get_usable_cores():
     return num_cores - 1
@@ -291,6 +292,11 @@ def write_log_to_file(filename, args):
         logfile.write(f"Starting computation at {now}\n")
         for key, value in vars(args).items():
             logfile.write(f"{key} : {value}\n")
+
+
+def print_to_logfile(filename, msg):
+    with open(filename, 'a') as f:
+        f.write(msg+'\n')
 
 
 def parse_numerical_values(path):
