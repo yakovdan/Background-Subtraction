@@ -256,6 +256,7 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
 
     while not converged:  # Algorithm line 2
         iter_out += 1
+        t0 = time.time()
         print(f"starting iteration :{iter_out}")
         print(f"Solving for L")
         # SOLVE FOR L
@@ -296,8 +297,10 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
         err = LA.norm(Z, ord='fro') / LA.norm(D, ord='fro')
 
         # print iteration info
+        t1 = time.time()
         print(f'Iteration: {iter_out:3d} rank(L): {svp:2d} ||S||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
-
+        print(f"time: {t1 - t0:.2f}s")
+        
         if err < tol_out:
             print('CONVERGED')
             converged = True
