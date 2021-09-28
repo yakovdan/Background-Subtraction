@@ -78,6 +78,7 @@ def import_video_as_frames(path, start, end, file_ending="jpg", work_type=np.flo
     frames_list = glob.glob(path + '*.'+file_ending)
     frames_list.sort(key=lambda f: int(''.join(filter(str.isdigit, f))))
     frames_list = frames_list[start:end+1]
+    print("first to load: {frames_list[0]}, last to load: {frames_list[-1]}")
     bitmap_seq = bitmap_to_mat(frames_list, grayscale=True).astype(work_type)
     video_data = np.ascontiguousarray(bitmap_seq.transpose((2, 0, 1)))
     ImData0 = np.asfortranarray(bitmap_seq)
