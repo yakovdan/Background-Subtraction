@@ -54,7 +54,7 @@ def inexact_alm_group_sparse_RPCA(D0, blocks_by_frame, lambdas_by_frame, delta=1
     d = np.min(D.shape)
 
     lambda_param = (np.sqrt(np.max((m, n))) * delta) ** (-1)
-    non_block_lambda = 8e2 * lambda_param
+    non_block_lambda = 1e2 * lambda_param
     MAX_RANK = d + 1
 
     # initialize

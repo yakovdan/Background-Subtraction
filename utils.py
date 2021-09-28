@@ -311,6 +311,9 @@ def parse_numerical_values(path):
         second_val_str = second_val_str.lstrip()
         second_val_str = second_val_str.rstrip()
         second_val_str = second_val_str[1:-1]
+        second_val_Lst = second_val_str.split("\n")
+        second_val_str = second_val_Lst[0]
+        second_val_str = second_val_str[:-1]
         second_val_Lst = second_val_str.split(" ")
         int_vals = [int(x) for x in second_val_Lst if len(x) > 0]
         original_downsampled_shape = tuple(int_vals)
@@ -405,13 +408,13 @@ def filter_sparse_map(sparse_array, size_thresh=None):
     if size_thresh is None:
         size_thresh = (sparse_array.shape[0] * sparse_array.shape[1]) // 1500  # from paper
     result_sparse_array = np.zeros_like(sparse_array)
+
     for i in range(sparse_array.shape[2]):
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(sparse_array[:, :, i].astype(np.uint8)*255,
                                                                                 connectivity, cv2.CV_32S)
-        ccs_dict, new_labels = unite_nestedCCs(num_labels, labels, stats)
-        for label, area in ccs_dict.items():
-            if area > size_thresh:
-                result_sparse_array[:, :, i][new_labels == label] = True
+        for j in range(1, num_labels):
+            if stats[j, cv2.CC_STAT_AREA] > size_thresh:
+                result_sparse_array[:, :, i][labels == j] = True
     return result_sparse_array
 
 

@@ -1,11 +1,6 @@
 import argparse
-
-import cv2
-import numpy as np
-import glob
-import os
-from datetime import datetime
 import time
+from numpy import linalg
 from RobustPCA.rpca import RobustPCA
 from utils import *
 import shutil
@@ -80,23 +75,23 @@ def executeSaliencyRPCA(ImData, downsample_ratio, grayscale_workmode=True, grays
         xt_plane = xt_plane[:, ::downscale_factor, ::downscale_factor, :].astype(np.float64)
         yt_plane = yt_plane[:, ::downscale_factor, ::downscale_factor, :].astype(np.float64)
 
-    # save_images(xt_plane, args.output+f"output_xt_{idx}", grayscale_workmode)
-    # save_images(yt_plane, args.output+f"output_yt_{idx}", grayscale_workmode)
+    #save_images(xt_plane, args.output+f"output_xt_{idx}", grayscale_workmode)
+    #save_images(yt_plane, args.output+f"output_yt_{idx}", grayscale_workmode)
 
     # compute decomposition for X-T plane
     print("Starting xt RPCA")
 
     xt_lowrank, xt_sparse = compute_RPCA(xt_plane, grayscale_workmode,
                                          xt_plane.shape[1] * xt_plane.shape[2] * 0.0001)
-    # save_images(xt_sparse, args.output+f"output_xt_sparse_{idx}", grayscale_workmode)
-    # save_images(xt_lowrank, args.output+f"output_xt_lowrank_{idx}", grayscale_workmode)
+    #save_images(xt_sparse, args.output+f"output_xt_sparse_{idx}", grayscale_workmode)
+    #save_images(xt_lowrank, args.output+f"output_xt_lowrank_{idx}", grayscale_workmode)
 
     # compute decomposition for Y-T plane
     print("Starting yt RPCA")
     yt_lowrank, yt_sparse = compute_RPCA(yt_plane, grayscale_workmode,
                                          yt_plane.shape[1] * yt_plane.shape[2] * 0.0001)
-    # save_images(yt_sparse, args.output+f"output_yt_sparse_{idx}", grayscale_workmode)
-    # save_images(yt_lowrank, args.output+f"output_yt_lowrank_{idx}", grayscale_workmode)
+    #save_images(yt_sparse, args.output+f"output_yt_sparse_{idx}", grayscale_workmode)
+    #save_images(yt_lowrank, args.output+f"output_yt_lowrank_{idx}", grayscale_workmode)
     return xt_lowrank, xt_sparse, yt_lowrank, yt_sparse
 
 

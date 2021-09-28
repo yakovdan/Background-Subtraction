@@ -6,6 +6,14 @@ import cv2
 import numpy as np
 from utils import *
 
+#  BLACK = 0;
+#  SHADOW = 50;
+#  OUTOFSCOPE = 85;
+#  UNKNOWN = 170;
+#  WHITE = 255;
+
+
+known_values = [0, 50, 255]
 
 def create_pretty_score_map(sparse_mat, gt_mat):
     pretty_map = np.zeros((list(sparse_mat.shape)+[3]), dtype=np.uint8)
@@ -22,49 +30,82 @@ def create_pretty_score_map(sparse_mat, gt_mat):
 
 
 # gt says it's an object, spare result agrees:
-def true_positive(sparse_mat, gt_mat):
+def true_positive(sparse_mat, gt_mat, roi_mask):
     tp_list = []
+    roi_mask_bool = roi_mask == 255
     for i in range(sparse_mat.shape[2]):
         sparse_frame = sparse_mat[:, :, i]
         gt_frame = gt_mat[:, :, i]
-        tp_list.append(np.sum(sparse_frame[gt_frame == 1]))
+        gt_search_area = np.logical_and(np.isin(gt_frame, known_values), roi_mask_bool)
+        gt_frame_bool = np.logical_and(gt_search_area, gt_frame == 255)
+        tp_frame_bool = np.logical_and(gt_frame_bool, sparse_frame)
+        tp_list.append(np.sum(tp_frame_bool))
     return np.array(tp_list)
 
 
 # gt says it's background but sparse result says it's an object
-def false_positive(sparse_mat, gt_mat):
+def false_positive(sparse_mat, gt_mat, roi_mask):
     fp_list = []
+    roi_mask_bool = roi_mask == 255
     for i in range(sparse_mat.shape[2]):
         sparse_frame = sparse_mat[:, :, i]
         gt_frame = gt_mat[:, :, i]
-        fp_list.append(np.sum(sparse_frame[gt_frame == 0]))
+        gt_search_area = np.logical_and(np.isin(gt_frame, known_values), roi_mask_bool)
+        gt_frame_bool = np.logical_and(gt_search_area, gt_frame != 255)  # not an object
+        fp_frame_bool = np.logical_and(gt_frame_bool, sparse_frame) # sparse says it's an object
+        fp_list.append(np.sum(fp_frame_bool))
     return np.array(fp_list)
 
 
 # gt says it's an object but sparse result says it's background
-def false_negative(sparse_mat, gt_mat):
+def false_negative(sparse_mat, gt_mat, roi_mask):
     fn_list = []
+    roi_mask_bool = roi_mask == 255
     for i in range(sparse_mat.shape[2]):
         sparse_frame = sparse_mat[:, :, i]
         gt_frame = gt_mat[:, :, i]
-        fn_list.append(np.sum(gt_frame[sparse_frame == 0]))
+        gt_search_area = np.logical_and(np.isin(gt_frame, known_values), roi_mask_bool)
+        gt_frame_bool = np.logical_and(gt_search_area, gt_frame == 255)  # an object!
+        fn_frame_bool = np.logical_and(gt_frame_bool, np.logical_not(sparse_frame))  # sparse says it's not an object
+        fn_list.append(np.sum(fn_frame_bool))
     return np.array(fn_list)
 
 
 # TP / (TP+FP)
 def compute_precision(tp_list, fp_list):
-    return tp_list / (tp_list+fp_list)
+    result = np.zeros(tp_list.shape, np.float32)
+    for i in range(tp_list.size):
+        if tp_list[i] == 0 and fp_list[i] == 0:
+            result[i] = 1
+        else:
+            result[i] = tp_list[i] / (tp_list[i]+fp_list[i])
+
+    return result
 
 
 # TP / (TP+FN)
 def compute_recall(tp_list, fn_list):
-    return tp_list / (tp_list+fn_list)
+    result = np.zeros(tp_list.shape, np.float32)
+    for i in range(tp_list.size):
+        if tp_list[i] == 0 and fn_list[i] == 0:
+            result[i] = 1
+        else:
+            result[i] = tp_list[i] / (tp_list[i]+fn_list[i])
+
+    return result
 
 
 def compute_fscore(tp_list, fp_list, fn_list):
     rc = compute_recall(tp_list, fn_list)
     pr = compute_precision(tp_list, fp_list)
-    return 2*rc*pr/(rc+pr)
+    result = np.zeros(rc.shape, np.float32)
+    for i in range(rc.size):
+        if rc[i] == 0 and pr[i] == 0:
+            result[i] = 1
+        else:
+            result[i] = 2*rc[i]*pr[i] / (rc[i]+pr[i])
+
+    return result
 
 
 def read_gt_start_stop_frames(path):
@@ -74,16 +115,20 @@ def read_gt_start_stop_frames(path):
         return vals
 
 
+
 def main(args):
     start_gt_frame, end_gt_frame = read_gt_start_stop_frames(args.input)
-    gt_frames, _ = import_video_as_frames(args.input + "/groundtruth/", start_gt_frame - 1, end_gt_frame,
-                                          file_ending="png", work_type=np.uint8)
-    gt_frames = np.ascontiguousarray(gt_frames)
+    end_gt_frame = start_gt_frame+498
+    roi_mask = cv2.cvtColor(cv2.imread(args.input+"ROI.bmp"), cv2.COLOR_BGR2GRAY)
 
-    if args.discard_segmentation:
-        gt_frames[gt_frames != 0] = 255
-    gt_frames = gt_frames.astype(np.bool_)
-    sparse_mat = np.load(args.sparse)[:, :, start_gt_frame - 1:].astype(np.float64)
+    gt_frames, _ = import_video_as_frames(args.input + "/groundtruth/",
+                                          start_gt_frame - 1,
+                                          end_gt_frame,
+                                          file_ending="png",
+                                          work_type=np.uint8)
+
+    gt_frames = np.ascontiguousarray(gt_frames)
+    sparse_mat = np.load(args.sparse).astype(np.float64)
     if sparse_mat.shape[:2] != gt_frames.shape[:2]:  # not the same scale
         height_scale = gt_frames.shape[0] // sparse_mat.shape[0]
         width_scale = gt_frames.shape[1] // sparse_mat.shape[1]
@@ -104,17 +149,16 @@ def main(args):
         sparse_mat = sparse_mat_resize
 
     sparse_mat = sparse_mat > 0
-    assert sparse_mat.shape, gt_frames.shape
-    assert sparse_mat.dtype, gt_frames.dtype
+    assert sparse_mat.shape == gt_frames.shape
 
-    tp_array = true_positive(sparse_mat, gt_frames)
-    fp_array = false_positive(sparse_mat, gt_frames)
-    fn_array = false_negative(sparse_mat, gt_frames)
+    tp_array = true_positive(sparse_mat, gt_frames, roi_mask)
+    fp_array = false_positive(sparse_mat, gt_frames, roi_mask)
+    fn_array = false_negative(sparse_mat, gt_frames, roi_mask)
 
     precision_array = compute_precision(tp_array, fp_array)
     recall_array = compute_recall(tp_array, fn_array)
     fscore_array = compute_fscore(tp_array, fp_array, fn_array)
-
+    print(f"Average fscore: {np.mean(fscore_array)}")
     plot_errors(precision_array, args.output+"precision.png",
                 "Precision over frames", "frames", "precision",
                 display=True,
@@ -143,7 +187,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='run LSD')
+    parser = argparse.ArgumentParser(description='run score calculation')
     parser.add_argument('--input', type=str, default=".", help='path to dataset root folder')
     parser.add_argument('--output', type=str, default=".", help='path to dataset root folder')
     parser.add_argument('--sparse', type=str, default=".", help='path to sparse matrix file')

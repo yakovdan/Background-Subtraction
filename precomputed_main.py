@@ -20,18 +20,18 @@ def main(root_path, scale_path, path_to_output,  frame_count, frame_start=0):
     delta = 10
     # set video start frame, end frame and downsample ratio
 
-    frame_end = frame_count+frame_count-1
+    frame_end = frame_count-1
     downsample_ratio = 4 if scale_path == 'smallscale/' else 1
-    video_mean, _ = parse_numerical_values(root_path+"LSD/"+scale_path+"numerical_values.txt")
+    video_mean, _ = parse_numerical_values(root_path+scale_path+"LSD/"+"numerical_values.txt")
 
-    lowrank_mat = np.load(root_path+"LSD/"+scale_path+"lowrank.npy")
-    sparse_mat = np.load(root_path+"LSD/"+scale_path+"sparse.npy")
+    lowrank_mat = np.load(root_path+scale_path+"LSD/"+"lowrank.npy")
+    sparse_mat = np.load(root_path+scale_path+"LSD/"+"sparse.npy")
     lowrank_reconstructed = lowrank_mat + video_mean
 
-    xt_sparse = np.load(root_path+"Saliency/"+scale_path+"xt_sparse.npy")
-    xt_lowrank = np.load(root_path+"Saliency/"+scale_path+"xt_lowrank.npy")
-    yt_sparse = np.load(root_path+"Saliency/"+scale_path+"yt_sparse.npy")
-    yt_lowrank = np.load(root_path+"Saliency/"+scale_path+"yt_lowrank.npy")
+    xt_sparse = np.load(root_path+scale_path+"Saliency/"+"xt_sparse.npy")
+    xt_lowrank = np.load(root_path+scale_path+"Saliency/"+"xt_lowrank.npy")
+    yt_sparse = np.load(root_path+scale_path+"Saliency/"+"yt_sparse.npy")
+    yt_lowrank = np.load(root_path+scale_path+"Saliency/"+"yt_lowrank.npy")
 
     #sparse_cube = computeSCube_frompaths('./highway_200frames/S_video_bin_dump_xt_plane.bin',
     #                           './highway_200frames/S_video_bin_dump_yt_plane.bin')
@@ -50,7 +50,8 @@ def main(root_path, scale_path, path_to_output,  frame_count, frame_start=0):
     ##############################
     # Load frames and preprocess #
     ##############################
-    video_data = np.load(root_path+"LSD/"+scale_path+"data.npy")
+    video_data = np.load(root_path+scale_path+"/LSD/"+"data.npy")
+
     ########### subtracting mean here because this was forgotten in the LSD source
     video_data = video_data - np.mean(video_data)
     sparse_cube = np.ascontiguousarray(sparse_cube.transpose((1, 2, 0)))
@@ -62,7 +63,7 @@ def main(root_path, scale_path, path_to_output,  frame_count, frame_start=0):
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
 
     # mask S and reshape back to 3d array
-    S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=2)
+    S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=3)
     S_mask_2 = S_mask_2.reshape(original_shape, order='C')
     S_mask_3 = foreground_mask(D, L, S, sigmas_from_mean=3).reshape(original_shape, order='C')
     L_recon = L.reshape(original_shape, order='C') + video_mean
@@ -82,13 +83,15 @@ def main(root_path, scale_path, path_to_output,  frame_count, frame_start=0):
         output_root = path_to_output
     else:
         output_root = "."
-    output_result_bitmap_seq(output_root+'/output/', video_data, L_recon, S_reshaped, S_mask_2)
-    np.save(output_root+'/output/S_mask2', S_mask_2)
+    output_result_bitmap_seq(output_root+'/final/', video_data, L_recon, S_reshaped, S_mask_2)
+    np.save(output_root+'/final/S_mask2', S_mask_2)
+
+
 if __name__ == "__main__":
-    root_path = 'D:/Masters/ProcessedData/highway_1700/'
+    root_path = './output_boats_500/'
     scale_path = 'smallscale/'
-    frame_count = 1700
-    output_path = "./output_1700/"
+    frame_count = 500
+    output_path = "./output_boats_500/smallscale/"
     print("Starting!")
     main(root_path, scale_path, output_path,  frame_count)
     print("Done!")
