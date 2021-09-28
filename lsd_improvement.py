@@ -409,6 +409,7 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
         total_allowed_iterations += 1
         S_mask_morph = apply_morph_ops(S_mask, percetage=disk_ratio) # initial guess
         weight_mask = merge_masks((S_mask, S_mask_morph), weights)
+        print(f'mask percentage: {mask_percent:.2f}%')
         mask_percent = calc_mask_percent(weight_mask) * 100
 
     print(f'final mask percentage: {mask_percent:.2f}%')
@@ -438,8 +439,8 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     print(f'Graphs time: {t1 - t0:.2f}s')
 
     background_masks = [(weight_mask[:, :, i] < 0).flatten(order='F') for i in range(weight_mask.shape[-1])]
-    for mask_idx, mask in zip(range(len(background_masks)), background_masks):
-        np.save(f"background_{mask_idx}", mask)
+    for g_idx, g in zip(range(len(graphs)), graphs):
+        np.save(f"graph_{g_idx}", g)
     return graphs, background_masks, iter_count, convergence
 
 
