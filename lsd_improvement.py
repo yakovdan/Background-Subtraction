@@ -391,6 +391,7 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
         .reshape(original_shape, order='F')
 
     # apply morphological operations
+    np.save('S_mask', S_mask)
 
     disk_ratio = 0.05
     disk_ratio_step_size = 0.01
