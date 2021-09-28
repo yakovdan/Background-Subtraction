@@ -407,12 +407,13 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     while mask_percent > max_mask_percent and current_iteration < total_allowed_iterations:
         disk_ratio -= disk_ratio_step_size
         total_allowed_iterations += 1
-        S_mask_morph = apply_morph_ops(S_mask, percetage=disk_ratio) # initial guess
+        S_mask_morph = apply_morph_ops(S_mask, percetage=disk_ratio)  # initial guess
         weight_mask = merge_masks((S_mask, S_mask_morph), weights)
         print(f'mask percentage: {mask_percent:.2f}%')
         mask_percent = calc_mask_percent(weight_mask) * 100
 
     print(f'final mask percentage: {mask_percent:.2f}%')
+    print(f'final ratio: {disk_ratio:.2f}%')
     # plot for debugging
     # normalized_weight_mask = 1 / weight_mask.copy()
     # normalizeImage(normalized_weight_mask)
