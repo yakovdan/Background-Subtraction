@@ -82,6 +82,7 @@ def import_video_as_frames(path, start, end, file_ending="jpg", work_type=np.flo
     bitmap_seq = bitmap_to_mat(frames_list, grayscale=True).astype(work_type)
     video_data = np.ascontiguousarray(bitmap_seq.transpose((2, 0, 1)))
     ImData0 = np.asfortranarray(bitmap_seq)
+    print ("done loading")
     return ImData0, video_data
 
 

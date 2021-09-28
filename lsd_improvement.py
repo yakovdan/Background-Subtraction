@@ -256,7 +256,8 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
 
     while not converged:  # Algorithm line 2
         iter_out += 1
-
+        print(f"starting iteration :{iter_out}")
+        print(f"Solving for L")
         # SOLVE FOR L
         G_L = D - S + Y / mu  # Algorithm line 4
 
@@ -277,10 +278,13 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
         L = svd_reconstruct(u[:, :svp], s[:svp] - 1 / mu, vh[:svp, :], order='F')  # Algorithm line 5
 
         # SOLVE FOR S
+        print(f"Solving for S")
         G_S = D - L + Y / mu  # Algorithm line 7
 
         # Algorithm line 8
+        print(f"prox by frame")
         S = prox_by_frame(G_S, lambda_param / mu, graphs)
+        print(f"apply shrinkage ops")
         apply_background_shrinkage_operator(G_S, S, background_lambda / mu, background_masks)
 
         # UPDATE Y, mu
@@ -451,7 +455,7 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
     else:
         print("Should not have gotten here. Something went wrong")
         raise Exception("LSD_improved wrong alg ver")
-
+    print("Building graphs")
     graphs, background_masks, graph_iter, graph_converged = build_improved_LSD_graphs(D,
                                                                                       original_downsampled_shape,
                                                                                       weights, delta=1.0,
