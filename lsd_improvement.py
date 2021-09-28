@@ -300,7 +300,7 @@ def inexact_alm_lsd_with_background(D0, graphs, background_masks, delta=10):
         t1 = time.time()
         print(f'Iteration: {iter_out:3d} rank(L): {svp:2d} ||S||_0: {LA.norm(S.flat, ord=0):.2E} err: {err:.3E}')
         print(f"time: {t1 - t0:.2f}s")
-        
+
         if err < tol_out:
             print('CONVERGED')
             converged = True
@@ -545,7 +545,7 @@ if __name__ == '__main__':
     parser.add_argument('--alg_ver', type=int, default=0, help='algo version. 0, 1, 2')
     parser.add_argument('--parallel', type=bool, default=False, help='run in parallel mode')
     args = parser.parse_args()
-    utils.USE_PARALLEL = args.parallel
+    USE_PARALLEL = args.parallel
     print('START')
 
     enabled_str = '*ENABLED* :)' if USE_PARALLEL else 'DISABLED :('
