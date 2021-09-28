@@ -155,8 +155,10 @@ def inexact_alm_lsd(D0, graphs=None, groups=None, delta=10):
 
         # Algorithm line 8
         if useFlat:
+            print("Using flat")
             S = prox_flat(G_S,  lambda_param / mu, groups, num_threads=get_usable_cores())
         else:
+            print("Using prox by frame")
             S = prox_by_frame(G_S, lambda_param / mu, graphs) if use_prox_by_frame \
                 else prox(G_S, lambda_param / mu, graphs, num_threads=get_usable_cores())
 
