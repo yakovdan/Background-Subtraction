@@ -327,11 +327,11 @@ def get_footprint(name, size):
     return np.expand_dims(footprint, axis=2)
 
 
-def apply_morph_ops(input, footprint_name='disk'):
+def apply_morph_ops(input, footprint_name='disk', percetage=0.05):
     im_height = input.shape[0]
 
-    footprint_dilation = get_footprint(footprint_name, 0.05 * im_height)
-    footprint_closing = get_footprint(footprint_name, 0.05 * im_height)
+    footprint_dilation = get_footprint(footprint_name, percetage * im_height)
+    footprint_closing = get_footprint(footprint_name, percetage * im_height)
     print('footprint_dilation: ' + str(footprint_dilation.shape))
     print('footprint_closing: ' + str(footprint_closing.shape))
 
@@ -391,12 +391,26 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
         .reshape(original_shape, order='F')
 
     # apply morphological operations
-    S_mask_morph = apply_morph_ops(S_mask)
+
+    disk_ratio = 0.05
+    disk_ratio_step_size = 0.01
+    total_allowed_iterations = 5
+    current_iteration = 1
+    max_mask_percent = 15
+
+    S_mask_morph = apply_morph_ops(S_mask, percetage=disk_ratio) # initial guess
     weight_mask = merge_masks((S_mask, S_mask_morph), weights)
-
     mask_percent = calc_mask_percent(weight_mask) * 100
-    print(f'mask percentage: {mask_percent:.2f}%')
 
+    print(f'mask percentage: {mask_percent:.2f}%')
+    while mask_percent > max_mask_percent and current_iteration < total_allowed_iterations:
+        disk_ratio -= disk_ratio_step_size
+        total_allowed_iterations += 1
+        S_mask_morph = apply_morph_ops(S_mask, percetage=disk_ratio) # initial guess
+        weight_mask = merge_masks((S_mask, S_mask_morph), weights)
+        mask_percent = calc_mask_percent(weight_mask) * 100
+
+    print(f'final mask percentage: {mask_percent:.2f}%')
     # plot for debugging
     # normalized_weight_mask = 1 / weight_mask.copy()
     # normalizeImage(normalized_weight_mask)
