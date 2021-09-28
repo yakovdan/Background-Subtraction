@@ -377,7 +377,7 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     print(f'delta = {delta:f}')
 
     if proximal_object is None:
-        L, S, iter_count, convergence = inexact_alm_rpca(D, delta=1.0)  # RPCA
+        L, S, iter_count, convergence = inexact_alm_rpca(D, delta=10.0)  # RPCA
     elif mode == "NONOVERLAPPING_GRAPHS":
         L, S, iter_count, convergence = inexact_alm_lsd_graph(D, proximal_object, delta)  # graphs
     elif mode == "NONOVERLAPPING_GROUPS":
