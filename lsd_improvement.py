@@ -423,7 +423,8 @@ def build_improved_LSD_graphs(D, original_shape, weights, delta=1.0, proximal_ob
     print(f'Graphs time: {t1 - t0:.2f}s')
 
     background_masks = [(weight_mask[:, :, i] < 0).flatten(order='F') for i in range(weight_mask.shape[-1])]
-
+    for mask_idx, mask in zip(range(len(background_masks)), background_masks):
+        np.save(f"background_{mask_idx}", mask)
     return graphs, background_masks, iter_count, convergence
 
 
@@ -461,7 +462,7 @@ def LSD_improved(ImData0, frame_start=0, frame_end=47, downsample_ratio=1, delta
     print("Building graphs")
     graphs, background_masks, graph_iter, graph_converged = build_improved_LSD_graphs(D,
                                                                                       original_downsampled_shape,
-                                                                                      weights, delta=0.1,
+                                                                                      weights, delta=1.0,
                                                                                       proximal_object=proximal_object,
                                                                                       mode=mode)
 
