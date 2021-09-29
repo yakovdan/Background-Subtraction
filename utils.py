@@ -286,7 +286,7 @@ def output_result_bitmap_seq(folder_name, data, lowrank_recon, sparse_mask, spar
         output_frame = np.concatenate((data_out, lowrank_out, sparse_out, sparse_bin_out), axis=1)
         video_data[:, :, i] = output_frame
         cv2.imwrite(folder_name + f"frame_{i}.bmp", output_frame)
-
+    np.save(folder_name+"video_data_out")
 
 def write_log_to_file(filename, args):
     now = datetime.now()
