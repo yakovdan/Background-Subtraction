@@ -197,8 +197,8 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='run score calculation')
-    parser.add_argument('--input', type=str, default=".", help='path to dataset root folder')
-    parser.add_argument('--output', type=str, default=".", help='path to dataset root folder')
+    parser.add_argument('--input', type=str, default=".", help='path to gt root folder')
+    parser.add_argument('--output', type=str, default=".", help='path to output root folder')
     parser.add_argument('--sparse', type=str, default=".", help='path to sparse matrix file')
     parser.add_argument('--discard_segmentation', type=bool, default=True,
                         help='keep or discard semantic values in GT images')

@@ -32,6 +32,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
 
     print("done loading data")
     if fullscale_video.shape[0] * fullscale_video.shape[1] != sparse_binary_mat.shape[0] * sparse_binary_mat.shape[1]: # upscale required
+        print("Rescaling!")
         sparse_binary_mat_upscale = np.zeros(fullscale_video.shape, dtype=np.bool)
 
         for i in range(sparse_binary_mat.shape[2]):
@@ -39,7 +40,8 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
             sparse_binary_mat_upscale[:, :, i] = np.kron(sparse_binary_mat[:, :, i], scaler_mat)
 
         sparse_binary_mat = sparse_binary_mat_upscale
-
+    else:
+        print("no rescaling needed!")
     assert sparse_binary_mat.shape == fullscale_video.shape
 
     hash_obj = hashlib.md5(saliency_path.encode())
