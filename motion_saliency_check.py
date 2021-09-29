@@ -13,7 +13,7 @@ def compute_lsd_mask(data, lowrank_mat, sparse_mat):
 
     size_thresh = (data.shape[0] * data.shape[1]) / 1500
     mask = foreground_mask(data, lowrank_mat, sparse_mat, sigmas_from_mean=2)
-    mask_image = (mask*255).astype(np.uint8)
+    mask_image = (mask * 255).astype(np.uint8)
     return mask_image, size_thresh
 
 
@@ -23,12 +23,14 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
     and a sparse cube and computes groups and weights for the specified frame
     """
     groups = []
-    connectivity = 4  # You need to choose 4 or 8 for connectivity type
-    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_image[:, :, frame_idx],
-                                                                                connectivity, cv2.CV_32S)
+    connectivity = 4  
+    num_labels, labels, stats, centroids = \
+        cv2.connectedComponentsWithStats(mask_image[:, :, frame_idx].astype(np.uint8) * 255,
+                                         connectivity,
+                                         cv2.CV_32S)
     areas = {}
     for i in range(1, num_labels):
-        #extract stats per cc
+        # extract stats per cc
         x = stats[i, cv2.CC_STAT_LEFT]
         y = stats[i, cv2.CC_STAT_TOP]
         w = stats[i, cv2.CC_STAT_WIDTH]
@@ -58,7 +60,7 @@ def filter_groups(groups, size_thresh):
     std_weight = np.std(all_weights)
     threshold_weight = mean_weight + std_weight
     weight_filtered_groups = list(filter(lambda g: g[1] > threshold_weight, groups))  # g[1] is the group weight
-    size_filtered_groups = list(filter(lambda g: g[2] > size_thresh, weight_filtered_groups))  #g[2] is the group area
+    size_filtered_groups = list(filter(lambda g: g[2] > size_thresh, weight_filtered_groups))  # g[2] is the group area
     return size_filtered_groups, min([g[1] for g in size_filtered_groups])
 
 
@@ -101,7 +103,7 @@ def run_motion_saliency_check(data, sparse_binary_mat, sparse_cube, delta=10):
     # to lambda_i value from the paper
     ########################################
 
-    normalization_factor_for_lambda = 1.0/(delta * np.sqrt(max(shape[0]*shape[1], shape[2])))
+    normalization_factor_for_lambda = 1.0 / (delta * np.sqrt(max(shape[0] * shape[1], shape[2])))
     normalization_factor_for_lambda = normalization_factor_for_lambda * min_weight
 
     ############################################
