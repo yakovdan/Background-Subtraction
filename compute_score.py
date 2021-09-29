@@ -135,7 +135,7 @@ def main(args):
 
         if height_scale != width_scale:
             print("cant resize sparse matrix to match gt and keep the same aspect ratio. something went wrong!")
-            sys.exit(-1)
+            raise Exception("Can't resize while keeping aspect ratio")
 
         sparse_mat_resize = np.zeros((sparse_mat.shape[0] * height_scale,
                                       sparse_mat.shape[1] * width_scale,

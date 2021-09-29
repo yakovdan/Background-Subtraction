@@ -62,7 +62,7 @@ def filter_groups(groups, size_thresh):
     return size_filtered_groups, min([g[1] for g in size_filtered_groups])
 
 
-def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=10):
+def run_motion_saliency_check(data, sparse_binary_mat, sparse_cube, delta=10):
     """
     this function takes a data matrix: np array of the video in [w,h,t] format, np.float64
     lowrank_mat - lowrank output of lsd, same format as above
@@ -75,15 +75,13 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=
     shape = data.shape
     video_length = shape[2]
 
-    #########################################
-    # compute foreground mask from lsd step.
-    # compute size threshold for filtering.
-    #########################################
-    lsd_mask, size_thresh = compute_lsd_mask(data, lowrank_mat, sparse_mat)
+    lsd_mask = sparse_binary_mat
+    size_thresh = (data.shape[0] * data.shape[1]) / 1500
 
     ###############################
     # compute groups for each frame
     ################################
+    print("processing frames")
 
     for i in range(video_length):
         groups_of_frame = compute_groups_per_frame(lsd_mask, sparse_cube, i)
