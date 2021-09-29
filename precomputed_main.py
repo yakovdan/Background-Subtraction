@@ -35,10 +35,10 @@ def main(lsd_path, saliency_path, output_path, frame_count, frame_start=0):
 
     #lowrank_reconstructed = lowrank_mat + video_mean
 
-    xt_sparse = np.load(f"{saliency_path}/xt_sparse.npy").astype(np.float32)
-    #xt_lowrank = np.load(f"{saliency_path}/xt_lowrank.npy").astype(np.float16)
-    yt_sparse = np.load(f"{saliency_path}/yt_sparse.npy").astype(np.float32)
-    #yt_lowrank = np.load(f"{saliency_path}/yt_lowrank.npy").astype(np.float16)
+    xt_sparse = np.load(f"{saliency_path}/xt_sparse.npy")
+    #xt_lowrank = np.load(f"{saliency_path}/xt_lowrank.npy")
+    yt_sparse = np.load(f"{saliency_path}/yt_sparse.npy")
+    #yt_lowrank = np.load(f"{saliency_path}/yt_lowrank.npy")
 
     #sparse_cube = computeSCube_frompaths('./highway_200frames/S_video_bin_dump_xt_plane.bin',
     #                           './highway_200frames/S_video_bin_dump_yt_plane.bin')
@@ -63,6 +63,13 @@ def main(lsd_path, saliency_path, output_path, frame_count, frame_start=0):
 
     print("running motion check")
     groups_by_frame, weights_by_frame = run_motion_saliency_check(video_data, lowrank_mat, sparse_mat, sparse_cube)
+
+    total_groups = 0
+    for fr in groups_by_frame:
+        total_groups += len(fr)
+
+    print(f"total groups: {total_groups}")
+
     original_shape = video_data.shape
     D = np.asfortranarray(video_data.reshape(video_data.shape[0]*video_data.shape[1], video_data.shape[2]))
 

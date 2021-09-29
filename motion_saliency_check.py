@@ -26,7 +26,6 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
     connectivity = 4  # You need to choose 4 or 8 for connectivity type
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_image[:, :, frame_idx],
                                                                                 connectivity, cv2.CV_32S)
-    print(f"numlabels: {num_labels}")
     areas = {}
     for i in range(1, num_labels):
         #extract stats per cc
@@ -41,14 +40,11 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
     areas, labels = unite_nestedCCs(num_labels, labels, stats)
 
     for label, area in areas.items():
-        print(f'label :{label} frame_idx: {frame_idx}')
         mask_2d = labels == label
         mask_1d = mask_2d.flatten(order='F')
-        print(f'done label :{label}')
         weight = np.sum(sparse_cube[:, :, frame_idx][mask_2d]) / area
         groups.append((frame_idx, weight, area, mask_1d))
 
-    print(f"done idx:{frame_idx}")
     return groups
 
 
@@ -61,12 +57,8 @@ def filter_groups(groups, size_thresh):
     mean_weight = np.mean(all_weights)
     std_weight = np.std(all_weights)
     threshold_weight = mean_weight + std_weight
-    print(f"filter: size: {size_thresh}, weight: {threshold_weight}")
-    print(f"len all groups {len(groups)}")
     weight_filtered_groups = list(filter(lambda g: g[1] > threshold_weight, groups))  # g[1] is the group weight
-    print(f"len after weight  {len(weight_filtered_groups)}")
     size_filtered_groups = list(filter(lambda g: g[2] > size_thresh, weight_filtered_groups))  #g[2] is the group area
-    print(f"len after size  {len(size_filtered_groups)}")
     return size_filtered_groups, min([g[1] for g in size_filtered_groups])
 
 
@@ -77,11 +69,6 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=
     sparse_mat - sparse output of lsd, same format as above
     sparse_cube - output of saliency step, same format as above
     """
-    np.save('data_test', data[:, :, 0])
-    np.save('lowrank_test', lowrank_mat[:, :, 0])
-    np.save('sparse_test', sparse_mat[:, :, 0])
-    np.save('cube_test', sparse_cube[:, :, 0])
-
     all_groups = []
     groups_by_frame = []
     weights_by_frame = []
@@ -107,10 +94,10 @@ def run_motion_saliency_check(data, lowrank_mat, sparse_mat, sparse_cube, delta=
     # filter groups using an adaptive weight threshold
     # and a size threshold
     ##################################################
-    print(f"all groups : {len(all_groups)}")
+
     all_filtered_groups, min_weight = filter_groups(all_groups, size_thresh)
     all_filtered_groups.sort(key=lambda g: g[0])  # sort by ascending frame idx
-
+    print(f"all filtered groups len {len(all_filtered_groups)}, min weight: {min_weight}")
     ###################################################
     # compute normalization factor to convert each weight
     # to lambda_i value from the paper
