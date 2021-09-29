@@ -35,7 +35,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
         sparse_binary_mat_upscale = np.zeros(fullscale_video.shape, dtype=np.bool)
 
         for i in range(sparse_binary_mat.shape[2]):
-            scaler_mat = np.ones((2, 2), dtype=np.bool)
+            scaler_mat = np.ones((4, 4), dtype=np.bool)
             sparse_binary_mat_upscale[:, :, i] = np.kron(sparse_binary_mat[:, :, i], scaler_mat)
 
         sparse_binary_mat = sparse_binary_mat_upscale
