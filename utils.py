@@ -114,7 +114,7 @@ def plot_errors(errors_list, filename, title, x_label, y_label, display=False, l
     plt.savefig(filename)
     if display:
         plt.show()
-
+    plt.clf()
 
 def resize_with_cv2_timefirst(images, ratio):
     result_size = [int(np.ceil(images.shape[i] * ratio)) for i in [1, 2]]

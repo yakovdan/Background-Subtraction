@@ -160,6 +160,14 @@ def main(args):
     recall_array = compute_recall(tp_array, fn_array)
     fscore_array = compute_fscore(tp_array, fp_array, fn_array)
     print(f"Average fscore: {np.mean(fscore_array)}")
+    print(f"Average recall: {np.mean(recall_array)}")
+    print(f"Average precision: {np.mean(precision_array)}")
+
+    with open(args.output+"scoredata.txt","w") as scorelog:
+        scorelog.write(f"Average Fscore: {np.mean(fscore_array)}\n")
+        scorelog.write(f"Average Recall: {np.mean(recall_array)}\n")
+        scorelog.write(f"Average Precision: {np.mean(precision_array)}\n")
+
     plot_errors(precision_array, args.output+"precision.png",
                 "Precision over frames", "frames", "precision",
                 display=True,
@@ -183,7 +191,7 @@ def main(args):
     np.save(args.output+"fn_array", fn_array)
 
     np.save(args.output+"precision_array", precision_array)
-    np.save(args.output+"reall", recall_array)
+    np.save(args.output+"rceall", recall_array)
     np.save(args.output+"fscore", fscore_array)
 
 
