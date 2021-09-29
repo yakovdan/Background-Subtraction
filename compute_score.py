@@ -149,6 +149,7 @@ def main(args):
         sparse_mat = sparse_mat_resize
 
     sparse_mat = sparse_mat > 0
+    print(sparse_mat.shape, gt_frames.shape)
     assert sparse_mat.shape == gt_frames.shape
 
     tp_array = true_positive(sparse_mat, gt_frames, roi_mask)
