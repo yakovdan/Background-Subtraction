@@ -128,11 +128,12 @@ def main(args):
                                           work_type=np.uint8)
 
     gt_frames = np.ascontiguousarray(gt_frames)
-    sparse_mat = np.load(args.sparse).astype(np.float64)[:, :, args.start_ind:]
+    sparse_mat = np.load(args.sparse)[:, :, args.start_ind:]
+    print(f"sparse mat dtype {sparse_mat.dtype}")
     if sparse_mat.shape[:2] != gt_frames.shape[:2]:  # not the same scale
         height_scale = gt_frames.shape[0] // sparse_mat.shape[0]
         width_scale = gt_frames.shape[1] // sparse_mat.shape[1]
-
+        print(f"resizing: {height_scale} {width_scale}")
         if height_scale != width_scale:
             print("cant resize sparse matrix to match gt and keep the same aspect ratio. something went wrong!")
             raise Exception("Can't resize while keeping aspect ratio")
@@ -142,13 +143,13 @@ def main(args):
                                       sparse_mat.shape[2]), dtype=sparse_mat.dtype)
 
         for i in range(sparse_mat.shape[2]):
-            sparse_mat_resize[:, :, i] = cv2.resize(src=sparse_mat[:, :, i],
-                                                    dsize=(sparse_mat.shape[1] * width_scale,
-                                                           sparse_mat.shape[0] * height_scale),
-                                                    interpolation=cv2.INTER_AREA)
+            # sparse_mat_resize[:, :, i] = cv2.resize(src=sparse_mat[:, :, i],
+            #                                         dsize=(sparse_mat.shape[1] * width_scale,
+            #                                                sparse_mat.shape[0] * height_scale),
+            #                                         interpolation=cv2.INTER_AREA)
+            sparse_mat_resize[:, :, i] = np.kron(sparse_mat[:, :, i], np.ones((height_scale, height_scale), bool))
         sparse_mat = sparse_mat_resize
 
-    sparse_mat = sparse_mat > 0
     print(sparse_mat.shape, gt_frames.shape)
     assert sparse_mat.shape == gt_frames.shape
 
