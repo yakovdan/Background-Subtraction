@@ -128,7 +128,7 @@ def main(args):
                                           work_type=np.uint8)
 
     gt_frames = np.ascontiguousarray(gt_frames)
-    sparse_mat = np.load(args.sparse).astype(np.float64)
+    sparse_mat = np.load(args.sparse).astype(np.float64)[args.start_ind:]
     if sparse_mat.shape[:2] != gt_frames.shape[:2]:  # not the same scale
         height_scale = gt_frames.shape[0] // sparse_mat.shape[0]
         width_scale = gt_frames.shape[1] // sparse_mat.shape[1]
@@ -194,6 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('--discard_segmentation', type=bool, default=True,
                         help='keep or discard semantic values in GT images')
     parser.add_argument('--output_video', type=bool, default=False, help="output video or not")
+    parser.add_argument('--start_ind', type=int, default=0, help="first frame index of sparse mat")
     args = parser.parse_args()
 
     print('START')
