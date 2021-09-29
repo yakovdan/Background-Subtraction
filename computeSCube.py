@@ -44,8 +44,6 @@ def build_final_cube(sparse_xt_cube, sparse_yt_cube):
     and normalization
     """
     assert sparse_xt_cube.shape == sparse_yt_cube.shape
-    assert sparse_xt_cube.dtype == np.float64
-    assert sparse_yt_cube.dtype == np.float64
     cube = np.multiply(sparse_xt_cube, sparse_yt_cube)  # elementwise
     sum_of_cube = np.sum(cube)
     return np.divide(cube, sum_of_cube)
@@ -89,7 +87,7 @@ def computeSCube(sparse_xt, sparse_yt):
     sparse_cube = build_final_cube(sparse_xt_cube, sparse_yt_cube)
     print('smooth cube')
     kern_size = int(min(sparse_cube.shape[1], sparse_cube.shape[2])/10)
-    smooth_sparse_cube = convolve(sparse_cube[:, :, :], gkern(kern_size), mode='reflect')
+    smooth_sparse_cube = convolve(sparse_cube[:, :, :], gkern(kern_size) , mode='reflect')
     print(np.sum(smooth_sparse_cube)) # should be close to 1
     return smooth_sparse_cube
     #print('apply adaptive threshold')
