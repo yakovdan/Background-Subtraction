@@ -27,6 +27,8 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     frame_end = frame_count-1
     sparse_binary_mat = np.load(f"{lsd_path}/sparse.bin.npy")
     fullscale_video = np.load(video_filename).astype(np.float64)
+    normalizeImage(fullscale_video)
+    print(f"min:{np.min(fullscale_video)},max: {np.max(fullscale_video)}")
     xt_sparse = np.load(f"{saliency_path}/xt_sparse.npy")
     yt_sparse = np.load(f"{saliency_path}/yt_sparse.npy")
 
