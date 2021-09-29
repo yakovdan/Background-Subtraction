@@ -13,7 +13,7 @@ from motion_saliency_check import *
 from computeSCube import *
 
 
-def main(lsd_path, saliency_path, output_path, frame_count, frame_start=0):
+def main(video_filename, lsd_path, saliency_path, output_path, frame_count, frame_start=0):
 
     cut_length = frame_count
     np.random.seed(0)
@@ -26,7 +26,7 @@ def main(lsd_path, saliency_path, output_path, frame_count, frame_start=0):
     print("start loading data")
     frame_end = frame_count-1
     sparse_binary_mat = np.load(f"{lsd_path}/sparse.bin.npy")
-    fullscale_video = np.load(f"{lsd_path}/video_data.npy").astype(np.float64)
+    fullscale_video = np.load(video_filename).astype(np.float64)
     xt_sparse = np.load(f"{saliency_path}/xt_sparse.npy")
     yt_sparse = np.load(f"{saliency_path}/yt_sparse.npy")
 
@@ -100,11 +100,12 @@ def main(lsd_path, saliency_path, output_path, frame_count, frame_start=0):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='run Saliency RPCA')
+    parser.add_argument('--video_filename', type=str, default=".", help='path to npy video')
     parser.add_argument('--lsd_path', type=str, default=".", help='path to lsd')
     parser.add_argument('--saliency_path', type=str, default=".", help='path to saliency')
     parser.add_argument('--output_path', type=str, default=".", help='path to output')
     parser.add_argument('--frame_count', type=int, default=0, help='frame_count')
     args = parser.parse_args()
     print("Starting!")
-    main(args.lsd_path, args.saliency_path, args.output_path, args.frame_count)
+    main(args.video_filename, args.lsd_path, args.saliency_path, args.output_path, args.frame_count)
     print("Done!")
