@@ -406,7 +406,7 @@ def filter_sparse_map(sparse_array, size_thresh=None):
     This function takes a binary sparse array
     and filters it such that no object smaller than size_thresh remains
     """
-    connectivity = 4  # choose 4 or 8 for connectivity type
+    connectivity = 8
     if size_thresh is None:
         size_thresh = (sparse_array.shape[0] * sparse_array.shape[1]) // 500  # from paper
     result_sparse_array = np.zeros_like(sparse_array)
@@ -421,7 +421,7 @@ def filter_sparse_map(sparse_array, size_thresh=None):
 
 
 def find_bounding_area_in_frame(sparse_frame):
-    connectivity = 4  # choose 4 or 8 for connectivity type
+    connectivity = 4
     work_frame = np.copy(sparse_frame)
     if work_frame.dtype != np.uint8:
         work_frame = work_frame.astype(np.uint8)
