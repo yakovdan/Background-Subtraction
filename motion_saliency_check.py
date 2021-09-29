@@ -88,6 +88,7 @@ def run_motion_saliency_check(data, sparse_binary_mat, sparse_cube, delta=10):
     for i in range(video_length):
         groups_of_frame = compute_groups_per_frame(lsd_mask, sparse_cube, i)
         print(f"frame idx: {i}, len: {len(groups_of_frame)}")
+        print(f" lsd mask shape : {lsd_mask.shape}, lsd_mask dtype: {lsd_mask.dtype}")
         all_groups.extend(groups_of_frame)
 
     ##################################################
