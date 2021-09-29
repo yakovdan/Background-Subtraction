@@ -128,7 +128,7 @@ def main(args):
                                           work_type=np.uint8)
 
     gt_frames = np.ascontiguousarray(gt_frames)
-    sparse_mat = np.load(args.sparse).astype(np.float64)[args.start_ind:]
+    sparse_mat = np.load(args.sparse).astype(np.float64)[:, :, args.start_ind:]
     if sparse_mat.shape[:2] != gt_frames.shape[:2]:  # not the same scale
         height_scale = gt_frames.shape[0] // sparse_mat.shape[0]
         width_scale = gt_frames.shape[1] // sparse_mat.shape[1]
