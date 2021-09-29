@@ -70,8 +70,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     original_shape = video_data_without_mean.shape
     D = np.asfortranarray(video_data_without_mean.reshape(
                           video_data_without_mean.shape[0]*video_data_without_mean.shape[1],
-                          video_data_without_mean.shape[2]),
-                          order='F')
+                          video_data_without_mean.shape[2], order='F'))
 
     print("GROUP SPARSE RPCA")
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)

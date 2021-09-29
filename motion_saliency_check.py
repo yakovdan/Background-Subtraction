@@ -23,7 +23,7 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
     and a sparse cube and computes groups and weights for the specified frame
     """
     groups = []
-    connectivity = 4  
+    connectivity = 4
     num_labels, labels, stats, centroids = \
         cv2.connectedComponentsWithStats(mask_image[:, :, frame_idx].astype(np.uint8) * 255,
                                          connectivity,
