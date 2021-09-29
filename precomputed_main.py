@@ -78,6 +78,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
     print("saving")
     # mask S and reshape back to 3d array
+    S_mask_1 = foreground_mask(D, L, S, sigmas_from_mean=1).reshape(original_shape, order='F')
     S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=2)
     S_mask_2 = S_mask_2.reshape(original_shape, order='F')
     S_mask_3 = foreground_mask(D, L, S, sigmas_from_mean=3).reshape(original_shape, order='F')
@@ -88,6 +89,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     normalizeImage(S_reshaped)
 
     # remove objects that are too small
+    S_mask_1 = filter_sparse_map(S_mask_1)
     S_mask_2 = filter_sparse_map(S_mask_2)
     S_mask_3 = filter_sparse_map(S_mask_3)
     # print('Plotting...')
@@ -95,6 +97,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     # subplots_samples((S_mask_3, S_mask_2, S_reshaped, L_recon, video_data), range(0, cut_length, cut_length // N), size_factor=2)
 
     output_result_bitmap_seq(output_path+'/final/', fullscale_video, L_recon, S_reshaped, S_mask_2)
+    np.save(output_path+'/binarymask/S_mask1', S_mask_1)
     np.save(output_path+'/binarymask/S_mask2', S_mask_2)
     np.save(output_path+'/binarymask/S_mask3', S_mask_3)
 
