@@ -1,12 +1,3 @@
-from collections import OrderedDict
-
-import numpy as np
-import cv2
-import os
-import sys
-from utils import *
-from inexact_alm_lsd import *
-from computeRPCADecomposition import *
 import hashlib
 from group_sparse_RPCA import *
 from motion_saliency_check import *
@@ -14,7 +5,6 @@ from computeSCube import *
 
 
 def main(video_filename, lsd_path, saliency_path, output_path, frame_count, frame_start=0):
-    print(f"Frame start :{frame_start}")
     cut_length = frame_count
     np.random.seed(0)
 
@@ -23,12 +13,10 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     delta = 10
 
     # set video start frame, end frame and downsample ratio
-    print("start loading data")
     frame_end = frame_count-1
-    sparse_binary_mat = np.load(f"{lsd_path}/sparse.bin.npy")[:, :, frame_start:]
-    fullscale_video = np.load(video_filename).astype(np.float64)[:, :, frame_start:]
+    sparse_binary_mat = np.load(f"{lsd_path}/sparse.bin.npy")
+    fullscale_video = np.load(video_filename).astype(np.float64)
     normalizeImage(fullscale_video)
-    print(f"min:{np.min(fullscale_video)},max: {np.max(fullscale_video)}")
     xt_sparse = np.load(f"{saliency_path}/xt_sparse.npy")
     yt_sparse = np.load(f"{saliency_path}/yt_sparse.npy")
 
@@ -54,7 +42,7 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
         sparse_cube = np.ascontiguousarray(sparse_cube.transpose((1, 2, 0)))
         np.save("sparse_cube"+hash_obj.hexdigest(), sparse_cube)
 
-    sparse_cube = sparse_cube[:, :, frame_start:]
+
     ##############################
     # Load frames and preprocess #
     ##############################
@@ -81,7 +69,6 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     L, S, iterations, converged = inexact_alm_group_sparse_RPCA(D, groups_by_frame, weights_by_frame, delta=delta)
     print("saving")
     # mask S and reshape back to 3d array
-    S_mask_1 = foreground_mask(D, L, S, sigmas_from_mean=1).reshape(original_shape, order='F')
     S_mask_2 = foreground_mask(D, L, S, sigmas_from_mean=2)
     S_mask_2 = S_mask_2.reshape(original_shape, order='F')
     S_mask_3 = foreground_mask(D, L, S, sigmas_from_mean=3).reshape(original_shape, order='F')
@@ -92,7 +79,6 @@ def main(video_filename, lsd_path, saliency_path, output_path, frame_count, fram
     normalizeImage(S_reshaped)
 
     # remove objects that are too small
-    S_mask_1 = filter_sparse_map(S_mask_1)
     S_mask_2 = filter_sparse_map(S_mask_2)
     S_mask_3 = filter_sparse_map(S_mask_3)
     # print('Plotting...')
