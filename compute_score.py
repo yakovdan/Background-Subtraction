@@ -4,11 +4,14 @@ from utils import *
 
 known_values = [0, 50, 255]  #  from CDNET 2014
 
-def create_pretty_score_map(sparse_mat, gt_mat):
+
+def create_pretty_score_map(sparse_mat, gt_mat, roi_mask):
+    roi_mask_bool =  roi_mask == 255
+    roi_mask_bool_3d = np.stack([roi_mask_bool] * min(gt_mat.shape[2],sparse_mat.shape[2]) , axis=2)
     pretty_map = np.zeros((list(sparse_mat.shape)+[3]), dtype=np.uint8)
-    map_tp = np.logical_and(sparse_mat, gt_mat)
-    map_fp = np.logical_and(sparse_mat, np.logical_not(gt_mat))
-    map_fn = np.logical_and(np.logical_not(sparse_mat), gt_mat)
+    map_tp = np.logical_and(np.logical_and(sparse_mat, gt_mat), roi_mask_bool_3d)
+    map_fp = np.logical_and(np.logical_and(sparse_mat, np.logical_not(gt_mat)), roi_mask_bool_3d)
+    map_fn = np.logical_and(np.logical_and(np.logical_not(sparse_mat), gt_mat), roi_mask_bool_3d)
     # place a white pixel for TP
     pretty_map[map_tp, :] = np.array((255, 255, 255), dtype=np.uint8)
     # place a red pixel for FN
@@ -170,7 +173,7 @@ def main(args):
                 log_scale=False)
 
     if args.output_video:
-        pretty_mat = create_pretty_score_map(sparse_mat, gt_frames)
+        pretty_mat = create_pretty_score_map(sparse_mat, gt_frames, roi_mask)
         np.save(args.output+"pretty_mat.bin", pretty_mat)
     np.save(args.output+"tp_array", tp_array)
     np.save(args.output+"fp_array", fp_array)
