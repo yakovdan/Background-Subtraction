@@ -1,13 +1,9 @@
 import argparse
-import matplotlib.pyplot as plt
-import numpy as np
 import spams
-import scipy.io
 import scipy.sparse as ssp
 import time
 
 from joblib import Parallel, delayed
-from numpy import linalg as LA
 
 import utils
 from utils import *

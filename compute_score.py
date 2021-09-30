@@ -1,19 +1,8 @@
 import argparse
-import sys
 import time
-
-import cv2
-import numpy as np
 from utils import *
 
-#  BLACK = 0;
-#  SHADOW = 50;
-#  OUTOFSCOPE = 85;
-#  UNKNOWN = 170;
-#  WHITE = 255;
-
-
-known_values = [0, 50, 255]
+known_values = [0, 50, 255]  #  from CDNET 2014
 
 def create_pretty_score_map(sparse_mat, gt_mat):
     pretty_map = np.zeros((list(sparse_mat.shape)+[3]), dtype=np.uint8)

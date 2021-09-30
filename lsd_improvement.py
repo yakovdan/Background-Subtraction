@@ -1,13 +1,6 @@
 import argparse
-
-import numpy as np
-from numpy import linalg as LA
 import scipy.sparse as ssp
-import scipy.io
-import matplotlib.pyplot as plt
 import math
-
-import utils
 from inexact_alm_lsd import subplots_samples, inexact_alm_lsd, getGraphSPAMS_all_groups, LSD, prox_by_frame, BLOCK_SIZE
 from utils import *
 import time
