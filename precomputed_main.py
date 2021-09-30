@@ -14,7 +14,7 @@ from computeSCube import *
 
 
 def main(video_filename, lsd_path, saliency_path, output_path, frame_count, frame_start=0):
-
+    print(f"Frame start :{frame_start}")
     cut_length = frame_count
     np.random.seed(0)
 
