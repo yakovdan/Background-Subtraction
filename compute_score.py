@@ -118,7 +118,7 @@ def read_gt_start_stop_frames(path):
 
 def main(args):
     start_gt_frame, end_gt_frame = read_gt_start_stop_frames(args.input)
-    end_gt_frame = start_gt_frame+498
+    start_gt_frame = max(start_gt_frame, args.start_gt_ind)
     roi_mask = cv2.cvtColor(cv2.imread(args.input+"ROI.bmp"), cv2.COLOR_BGR2GRAY)
 
     gt_frames, _ = import_video_as_frames(args.input + "/groundtruth/",
@@ -143,10 +143,6 @@ def main(args):
                                       sparse_mat.shape[2]), dtype=sparse_mat.dtype)
 
         for i in range(sparse_mat.shape[2]):
-            # sparse_mat_resize[:, :, i] = cv2.resize(src=sparse_mat[:, :, i],
-            #                                         dsize=(sparse_mat.shape[1] * width_scale,
-            #                                                sparse_mat.shape[0] * height_scale),
-            #                                         interpolation=cv2.INTER_AREA)
             sparse_mat_resize[:, :, i] = np.kron(sparse_mat[:, :, i], np.ones((height_scale, height_scale), bool))
         sparse_mat = sparse_mat_resize
 
@@ -205,6 +201,7 @@ if __name__ == '__main__':
                         help='keep or discard semantic values in GT images')
     parser.add_argument('--output_video', type=bool, default=False, help="output video or not")
     parser.add_argument('--start_ind', type=int, default=0, help="first frame index of sparse mat")
+    parser.add_argument('--start_gt_ind', type=int, default=0, help="first frame index of gt mat")
     args = parser.parse_args()
 
     print('START')
