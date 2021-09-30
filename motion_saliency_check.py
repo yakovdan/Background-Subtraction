@@ -45,7 +45,7 @@ def compute_groups_per_frame(mask_image, sparse_cube, frame_idx):
         mask_2d = labels == label
         mask_1d = mask_2d.flatten(order='F')
         weight = np.sum(sparse_cube[:, :, frame_idx][mask_2d]) / area
-        groups.append((frame_idx, weight, area, mask_1d))
+        groups.append((frame_idx, weight, area, mask_1d.astype(bool)))
 
     return groups
 
