@@ -408,7 +408,7 @@ def filter_sparse_map(sparse_array, size_thresh=None):
     """
     connectivity = 8
     if size_thresh is None:
-        size_thresh = (sparse_array.shape[0] * sparse_array.shape[1]) // 500  # from paper
+        size_thresh = (sparse_array.shape[0] * sparse_array.shape[1]) // 200
     result_sparse_array = np.zeros_like(sparse_array)
 
     for i in range(sparse_array.shape[2]):
